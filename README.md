@@ -1,6 +1,6 @@
 # recipe-app-api
 
-# Setup new project (git, GitHub and Docker)
+## Setup new project (git, GitHub and Docker)
 
 1. Connect to GitHub using SSH: https://docs.github.com/en/github/authenticating-to-github/connecting-to-github-with-ssh
   * Go to your GitHub repository page and copy the SSH URL to your clipboard.
@@ -54,27 +54,32 @@ Note: Docker Compose is a tool that allows you to run your Docker image easily
 Note: This file contains the configuration for all of the services that
       make up your project.
 
-    - `version: "3"`: sets up the version of Docker Compose that we are
-      going to use.
-    - `services:`: defines the services that make up our application.
-    - `app:`: this is the name of our service.
-    - `build:`: this is the build section.
-    - `context: .`: determines that the project in your current directory
-      will be a service.
-    - ports: - "8000:8000": maps your project from port 8000 on your
-      host to port 8000 on your image.
-    - `volumes: - ./app:/app`: allows you to get the updates, that you
-      make to our project, into your Docker image in real time. This means
-      that whenever you change a file or you change something in the project,
-      it will be automatically updated in the container and you do not need
-      to restart Docker to get the changes into effect. `- ./app:/app`
-      maps the **app** directiory whichyou have in your project to the **app**
-      directory in your Docker image.
-    - `command: > sh -c "python manage.py runserver 0.0.0.0:8000"`: command
-      that you are going to use to run your application in your Docker container.
-      The `>` is used to break the command into the next line (remember that
-      the next line has to be indented by one). `sh -c` stands for running
-      a **shell command**.
+---
+
+* `version: "3"`: sets up the version of Docker Compose that we are
+  going to use.
+* `services:`: defines the services that make up our application.
+* `app:`: this is the name of our service.
+* `build:`: this is the build section.
+* `context: .`: determines that the project in your current directory
+  will be a service.
+* ports: - "8000:8000": maps your project from port 8000 on your
+  host to port 8000 on your image.
+* `volumes: - ./app:/app`: allows you to get the updates, that you
+  make to our project, into your Docker image in real time. This means
+  that whenever you change a file or you change something in the project,
+  it will be automatically updated in the container and you do not need
+  to restart Docker to get the changes into effect. `- ./app:/app`
+  maps the **app** directiory whichyou have in your project to the **app**
+  directory in your Docker image.
+* `command: > sh -c "python manage.py runserver 0.0.0.0:8000"`: command
+  that you are going to use to run your application in your Docker container.
+  The `>` is used to break the command into the next line (remember that
+  the next line has to be indented by one). `sh -c` stands for running
+  a **shell command**.
+
+---
+
   * Within terminal type `docker-compose build` to build your image using the
     *docker-compose* configuration.
 
