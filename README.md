@@ -91,3 +91,74 @@ Note: This file contains the configuration for all of the services that
 
 Note: ```sh -c``` is not needed but it makes it clear that we are executing shell
       command.
+
+## Setup automation (Travis-CI)
+
+Note: Travis-CI lets you automate some of the tests and check on your project
+      every time you push it to GitHub. For example every time you push a change
+      to GitHub you can make it run your Python unit tests and your Python linting.
+      So if there is any issue with your code you can see straight away via
+      an email notification that the build is broken.
+
+---
+
+### Create account and connect it to GitHub
+
+1. Head over to https://travis-ci.com.
+2. Sign up using GitHub account.
+3. After redirecting to your *Dashboard* you should see your repos. If not,
+   synchronize your GitHub repos to Travis account.
+
+ ---
+
+### Setup project in Travis-CI
+
+1. Find your project on *Dashboard* and *Trigger a build*.
+2. Head over to Atom and create *.travis.yml* file within **recipe_app_api**:
+
+Note: *.travis.yml* is the configuration file that tells Travis what to do every
+      time you push a change to your project.
+
+---
+
+* `language: python`: tells what language Travis should expect your project
+  to be in.
+* `python: - "3.6"`: sets the version of the language. This is only for Travis -
+  at the end *docker-compose* file determines in which version project will
+  be running as it is a configuration file.
+* `services: - docker`: tells Travis what services you need to use. All sub
+  services are going to be contained within your *docker-compose* file
+  configuration.
+* `before_install: - echo $DOCKER_PASSWORD | docker login --username $DOCKER_USERNAME --password-stdin`:
+  before installation `echo $DOCKER_PASSWORD` prints the password to the screen,
+  `docker login --username $DOCKER_USERNAME` calls the Docker login command with
+  the username you set in the environment variables* and `--password-stdin`
+  accepts the password in a way that prevents it being printed to the screen.
+
+      *Docker have applied a rate limit on pulling images to 100 pulls within 6 hours
+      for unauthenticated users and 200 for authenticated users. Because Travis_CI
+      uses a shared IP, the 100 pulls is consumed quickly.
+      The solution is to authenticate with Docker in the Travis-CI job, so you can take
+      advantage of the 200 pulls every 6 hours. You can do it by following the below
+      steps:
+      1. Register on Docker Hub at https://hub.docker.com/.
+      2. Add credentials to Travis-CI project:
+        * Login to https://travis-ci.com/ and head over to your project.
+        * Choose *More options* > *Settings*.
+        * Find *Environment Variables*.
+        * Add variables **DOCKER_USERNAME** - the username for your Docker Hub
+          account, **DOCKER_PASSWORD** - the password for your Docker Hub account.
+
+* `before_script: pip install docker-compose`: executes before running script.
+  This is because you need to install docker-compose.
+* `script: - docker-compose run app sh -c "python3 manage.py test && flake8"`:
+  specifies the script. You need to run your docker-compose command for running
+  your tests. Command also runs linting tool (flake8) which you need to install
+  in your project.
+
+3. Open up *requirements.txt* in your project.
+4. Add line `flake8>=3.6.0,<3.7.0`.
+5. Create new configuration file *.flake8* within your project's root directory.
+6. Add line `[flake8]` and `exclude = migrations, __pycache__, manage.py, settings.py`
+  to exclude some of the automated scripts and tools that are created by Django
+  so it does not fail on the linting when you run that.
