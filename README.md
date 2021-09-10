@@ -119,8 +119,6 @@ Note: Travis-CI lets you automate some of the tests and check on your project
 Note: *.travis.yml* is the configuration file that tells Travis what to do every
       time you push a change to your project.
 
----
-
 * `language: python`: tells what language Travis should expect your project
   to be in.
 * `python: - "3.6"`: sets the version of the language. This is only for Travis -
@@ -159,6 +157,83 @@ Note: *.travis.yml* is the configuration file that tells Travis what to do every
 3. Open up *requirements.txt* in your project.
 4. Add line `flake8>=3.6.0,<3.7.0`.
 5. Create new configuration file *.flake8* within your project's root directory.
-6. Add line `[flake8]` and `exclude = migrations, __pycache__, manage.py, settings.py`
+6. Add lines `[flake8]` and `exclude = migrations, __pycache__, manage.py, settings.py`
   to exclude some of the automated scripts and tools that are created by Django
   so it does not fail on the linting when you run that.
+
+## Test-driven Development - simple example
+
+### Unit Test
+
+1. Open up Atom and create *calc.py* file within **app/app**.
+2. In that file create a simple *add* function to add two items.
+3. In the same directory create *tests.py* file.
+
+Note: The Django Unit Test Framework looks for any files that begin with *tests*
+      and it basically uses them as the tests when you run the *Django run unit tests*
+      command. Make sure that any tests are in a folder or a file name that
+      begins with *tests*.
+
+4. Within newly created *tests.py* import TestCase - `from django.test import TestCase`.
+5. Also import wanted function - `from app.calc import add`.
+6. Declare CalcTest class - `class CalcTests(TestCase):`.
+7. Define unit test for add function - `def test_add_numbers(self):`.
+
+Note: Remember that a name of testing method has to start with a word *test*.
+
+8. Test is set up of two components. There usually is the setup stage which is
+   where you would set your function up to be tested and then there is the
+   assertion which is when you actually test the output and you confirm that
+   the output equals what you expected it to equal. So what we are going to do
+   is very simple to set up and the assertion can all be done on one line.
+   Type `self.assertEqual(add(3, 8), 11)` to basically tell that you want to use
+   *add* function to add 3 to 8 and you expect the result to be 11.
+
+9. To run your docker container and test, head over to your terminal and type
+   `docker-compose run app sh -c "python3 manage.py test"`.
+
+## Test with Test-driven Development
+
+Note: Test-driven Development is simply when you write the test before you write
+      the code.
+
+1. Our plan is to create a function called *substract* within a *calc.py* file.
+   To do that you firstly have to create a new method in */tests.py/CalcTests*
+   called *test_substract_numbers*.
+
+Note: Again - remember that test method has to have word *test* at the beginning.
+
+2. Make an **assertion** that **some kind of input equals some kind of output**.
+3. Run `docker-compose run app sh -c "python3 manage.py test"` command in
+   terminal to execute tests. Expect it to fail.
+4. Head over to *calc.py* file and declare *substract* function (add *pass* in
+   definition).
+5. Run `docker-compose run app sh -c "python3 manage.py test"` again. Now it
+   should fail with different error.
+6. Finish definition of *substract* function.
+7. Run `docker-compose run app sh -c "python3 manage.py test"` again. Terminal
+   should show no errors. This is your goal.
+8. Run `docker-compose run app sh -c "python3 manage.py test && flake8"` to check
+   for errors and do linting as well just to see that there is no issues with
+   the code.
+
+Note: In case of error like `sh: flake8: not found`, make sure that flake8 is on
+      the *requirements.txt* list. Then run `docker-compose build` in terminal.
+
+---
+
+So what's the benefit of writing tests like this? Well the main benefit is that
+you know your tests work so there's often cases where you'll write a unit test
+and you think it's testing something but really it's not testing something so for
+example maybe as I explained earlier you forgot to add the test string
+to the beginning of the function name and therefore the test is just never
+getting picked up by the test runner and therefore it seems like everything is
+working fine but really your test is just not running. So it helps eliminate
+those issues from your code also it helps improve the way you think about
+your code because before you write the code you're thinking "well I need to
+write code that I can test" and in order to do that you have to write basically
+high quality code. Usually code that's easy to test is easy to maintain
+and it's better quality than code that's just kind of being written without
+thinking about the tests in advance.
+
+---
