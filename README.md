@@ -237,3 +237,5 @@ and it's better quality than code that's just kind of being written without
 thinking about the tests in advance.
 
 ---
+
+## Configure Django Custom User Model
