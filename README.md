@@ -1,41 +1,41 @@
-# recipe-app-api
+# recipe-app-api - Python Django recipe Project
 
 ## Setup new project (git, GitHub and Docker)
 
 1. Connect to GitHub using SSH: https://docs.github.com/en/github/authenticating-to-github/connecting-to-github-with-ssh
-  * Go to your GitHub repository page and copy the SSH URL to your clipboard.
-  * Head over to terminal and change the location to **recipe_app_api**.
-  * Type ```git clone <COPIED LINK>``` (if any problems, go to 1. step) - this
-    command clones GitHub repo to your local machine.
-  * ```cd``` to change into the recipe app API folder and then type ```atom .```.
+* Go to your GitHub repository page and copy the SSH URL to your clipboard.
+* Head over to terminal and change the location to **recipe_app_api**.
+* Type ```git clone <COPIED LINK>``` (if any problems, go to 1. step) - this
+  command clones GitHub repo to your local machine.
+* ```cd``` to change into the recipe app API folder and then type ```atom .```.
 2. Add *Dockerfile* within **recipe_app_api**.
 3. Setup *Dockerfile*:
-  * First line of the Dockerfile is the image that you are going to inherit
-    your Docker file from (list of available images: https://hub.docker.com/).
+* First line of the Dockerfile is the image that you are going to inherit
+  your Docker file from (list of available images: https://hub.docker.com/).
 
-Note: ```ENV PYTHONUNBUFFERED 1``` - it is recommended to run in unbuffered
-      mode when running Python within Docker containers. The reason for this
-      is that it does not allow Python to buffer the outputs. It just prints
-      them directly.
+> Note: ```ENV PYTHONUNBUFFERED 1``` - it is recommended to run in unbuffered
+        mode when running Python within Docker containers. The reason for this
+        is that it does not allow Python to buffer the outputs. It just prints
+        them directly.
 
-  * add empty folder within **recipe_app_api** with the name defined in
-    the *Dockerfile*.
+* add empty folder within **recipe_app_api** with the name defined in
+  the *Dockerfile*.
 4. Add *requirements.txt* within **recipe_app_api** and set up dependencies:
-  * Head over to *Dockerfile* and add ```COPY ./requirements.txt /requirements.txt```
-    to copy the *requirements* file that we are going to create here and copy
-    it on the Docker image to */requirements.txt*.
-  * Run ```RUN pip install -r /requirements.txt``` to take the *requirements.txt*
-    file that we have just copied and it installs it using pip into the Docker
-    image.
-  * Run ```RUN mkdir /app```, then ```WORKDIR /app``` and then ```COPY ./app /app```
-    to create an empty folder, make it as a default directory and copy it from
-    your local machine to the **app** folder that we have created on an image.
+* Head over to *Dockerfile* and add ```COPY ./requirements.txt /requirements.txt```
+  to copy the *requirements* file that we are going to create here and copy
+  it on the Docker image to */requirements.txt*.
+* Run ```RUN pip install -r /requirements.txt``` to take the *requirements.txt*
+  file that we have just copied and it installs it using pip into the Docker
+  image.
+* Run ```RUN mkdir /app```, then ```WORKDIR /app``` and then ```COPY ./app /app```
+  to create an empty folder, make it as a default directory and copy it from
+  your local machine to the **app** folder that we have created on an image.
 
-Note: Following 2 steps are for security purposes.
+> Note: Following 2 steps are for security purposes.
 
-  * Create a user that is going to run your application using Docker - ```RUN adduser -D user```
-    (```-D``` - user is going to be used for running applications only).
-  * Switch to the created newly created user - ```USER user```.
+* Create a user that is going to run your application using Docker - ```RUN adduser -D user```
+  (```-D``` - user is going to be used for running applications only).
+* Switch to the created newly created user - ```USER user```.
 
 5. Build Docker by going to terminal and typing ```docker build .```
    (if *Got permission denied*, try ```sudo usermod -aG docker $USER```
@@ -43,16 +43,16 @@ Note: Following 2 steps are for security purposes.
 
 6. Create Docker Compose configuration for your project:
 
-Note: Docker Compose is a tool that allows you to run your Docker image easily
-      from your project location. It allows you to easily manage the different
-      services tat make up your project. For example one service might be the
-      Python application that we run, another service migth be the database.
+> Note: Docker Compose is a tool that allows you to run your Docker image easily
+        from your project location. It allows you to easily manage the different
+        services tat make up your project. For example one service might be the
+        Python application that we run, another service migth be the database.
 
-  * Create *docker-compose.yml* file within the root of your project
-    (**recipe-app-api** folder):
+* Create *docker-compose.yml* file within the root of your project
+  (**recipe-app-api** folder):
 
-Note: This file contains the configuration for all of the services that
-      make up your project.
+> Note: This file contains the configuration for all of the services that
+        make up your project.
 
 ---
 
@@ -80,27 +80,25 @@ Note: This file contains the configuration for all of the services that
 
 ---
 
-  * Within terminal type `docker-compose build` to build your image using the
-    *docker-compose* configuration.
+* Within terminal type `docker-compose build` to build your image using the
+  *docker-compose* configuration.
 
-  Note: Alpine is very light version so the process of building should be fast
+> Note: Alpine is very light version so the process of building should be fast
         as it is additionally cached.
 
 7. Create Django project by running `docker-compose run app sh -c "django-admin.py startproject app ."`.
    (if exceptions are being raised, try course's troubleshoot).
 
-Note: ```sh -c``` is not needed but it makes it clear that we are executing shell
-      command.
+> Note: ```sh -c``` is not needed but it makes it clear that we are executing shell
+        command.
 
 ## Setup Automation (Travis-CI)
 
-Note: Travis-CI lets you automate some of the tests and check on your project
-      every time you push it to GitHub. For example every time you push a change
-      to GitHub you can make it run your Python unit tests and your Python linting.
-      So if there is any issue with your code you can see straight away via
-      an email notification that the build is broken.
-
----
+> Note: Travis-CI lets you automate some of the tests and check on your project
+        every time you push it to GitHub. For example every time you push a change
+        to GitHub you can make it run your Python unit tests and your Python linting.
+        So if there is any issue with your code you can see straight away via
+        an email notification that the build is broken.
 
 ### Create account and connect it to GitHub
 
@@ -109,15 +107,13 @@ Note: Travis-CI lets you automate some of the tests and check on your project
 3. After redirecting to your *Dashboard* you should see your repos. If not,
    synchronize your GitHub repos to Travis account.
 
- ---
-
 ### Setup project in Travis-CI
 
 1. Find your project on *Dashboard* and *Trigger a build*.
 2. Head over to Atom and create *.travis.yml* file within **recipe_app_api**:
 
-Note: *.travis.yml* is the configuration file that tells Travis what to do every
-      time you push a change to your project.
+> Note: *.travis.yml* is the configuration file that tells Travis what to do every
+        time you push a change to your project.
 
 * `language: python`: tells what language Travis should expect your project
   to be in.
@@ -169,17 +165,17 @@ Note: *.travis.yml* is the configuration file that tells Travis what to do every
 2. In that file create a simple *add* function to add two items.
 3. In the same directory create *tests.py* file.
 
-Note: The Django Unit Test Framework looks for any files that begin with *tests*
-      and it basically uses them as the tests when you run the *Django run unit tests*
-      command. Make sure that any tests are in a folder or a file name that
-      begins with *tests*.
+> Note: The Django Unit Test Framework looks for any files that begin with *tests*
+        and it basically uses them as the tests when you run the *Django run unit tests*
+        command. Make sure that any tests are in a folder or a file name that
+        begins with *tests*.
 
 4. Within newly created *tests.py* import TestCase - `from django.test import TestCase`.
 5. Also import wanted function - `from app.calc import add`.
 6. Declare CalcTest class - `class CalcTests(TestCase):`.
 7. Define unit test for add function - `def test_add_numbers(self):`.
 
-Note: Remember that a name of testing method has to start with a word *test*.
+> Note: Remember that a name of testing method has to start with a word *test*.
 
 8. Test is set up of two components. There usually is the setup stage which is
    where you would set your function up to be tested and then there is the
@@ -194,14 +190,14 @@ Note: Remember that a name of testing method has to start with a word *test*.
 
 ## Test With Test-driven Development
 
-Note: Test-driven Development is simply when you write the test before you write
-      the code.
+> Note: Test-driven Development is simply when you write the test before you write
+        the code.
 
 1. Our plan is to create a function called *substract* within a *calc.py* file.
    To do that you firstly have to create a new method in */tests.py/CalcTests*
    called *test_substract_numbers*.
 
-Note: Again - remember that test method has to have word *test* at the beginning.
+> Note: Again - remember that test method has to have word *test* at the beginning.
 
 2. Make an **assertion** that **some kind of input equals some kind of output**.
 3. Run `docker-compose run app sh -c "python3 manage.py test"` command in
@@ -217,8 +213,8 @@ Note: Again - remember that test method has to have word *test* at the beginning
    for errors and do linting as well just to see that there is no issues with
    the code.
 
-Note: In case of error like `sh: flake8: not found`, make sure that flake8 is on
-      the *requirements.txt* list. Then run `docker-compose build` in terminal.
+> Note: In case of error like `sh: flake8: not found`, make sure that flake8 is on
+        the *requirements.txt* list. Then run `docker-compose build` in terminal.
 
 ---
 
@@ -240,49 +236,51 @@ thinking about the tests in advance.
 
 ## Configure Django Custom User Model
 
-Note: To make it clear, last steps connected with TDD were used as examples, so
-      you can delete *calc.py* and *tests.py*.
+> Note: To make it clear, last steps connected with TDD were used as examples, so
+        you can delete *calc.py* and *tests.py*.
 
 1. Create a core app which will hold all of the central code that is important
    to the rest of the sub apps that you create in your system - open up terminal
    and within **recipe-app-api** folder type `docker-compose run app sh -c "python3 manage.py startapp core"`.
 
-Note: This app is going to contain anything that is shared between one or more
-      apps, so things like the migrations, the database. Putting it in one
-      module will make it very clear where the kind of central point of all
-      these things is.
+> Note: This app is going to contain anything that is shared between one or more
+        apps, so things like the migrations, the database. Putting it in one
+        module will make it very clear where the kind of central point of all
+        these things is.
 
 2. Delete files that will not be needed - *tests.py*, *views.py*
 
-Note: Tests are going to be listed in the **tests** folder as it makes it
-      clearer where the tests are. You would like to keep all the tests grouped
-      in this test folder. You can keep it in a file called *tests.py* but
-      because with an app you may have multiple tests you may want to split them
-      up into separate test files and you can only have it in a *test.py* file
-      or the tests folder. You can not have both. If you have both in there,
-      there will be an error. It is recommended putting it in a folder just so
-      that it allows you to easily scale up your tests if necessary.
+> Note: Tests are going to be listed in the **tests** folder as it makes it
+        clearer where the tests are. You would like to keep all the tests grouped
+        in this test folder. You can keep it in a file called *tests.py* but
+        because with an app you may have multiple tests you may want to split them
+        up into separate test files and you can only have it in a *test.py* file
+        or the tests folder. You can not have both. If you have both in there,
+        there will be an error. It is recommended putting it in a folder just so
+        that it allows you to easily scale up your tests if necessary.
 
 3. Create **tests** folder within the **core** app and add there the
    *\_\_innit.py\_\_* file.
+
+---
 
 ### Create Custom User Manager Model
 
 1. Go to *settings.py* and add newly created app.
 2. Head over to **tests** and create *test_models.py*.
-3. Import TestCase from django.test and get_user_model from django.contrib.auth.
+3. Import *TestCase* from *django.test* and *get_user_model* from *django.contrib.auth*.
 
-Note: You can import the user model directly from the models but this is not
-      recommended with Django because at some point in the project you may want
-      to change what your user model is and if everything is using the
-      *get_user_model* function then that is really easy to do because you just
-      change it in the settings instead of having to change all the references
-      to the user model.
+> Note: You can import the user model directly from the models but this is not
+        recommended with Django because at some point in the project you may want
+        to change what your user model is and if everything is using the
+        *get_user_model* function then that is really easy to do because you just
+        change it in the settings instead of having to change all the references
+        to the user model.
 
 4. Declare test class - `class ModelTests(TestCase):`.
 5. Create a **test case** - `def test_create_user_with_email_successful(self):`.
 6. Create sample email and password variables.
-7. Using *get_user_model()* and *create_user()* (which will be a models.UserManager
+7. Using *get_user_model()* and *create_user()* (which will be a *models.UserManager*
    method) create new user with sample email and password -
    `user = get_user_model().objects.create_user(email=email, password=password)`.
 8. Check if the newly created user's email is equal to sample email -
@@ -290,12 +288,12 @@ Note: You can import the user model directly from the models but this is not
 9. Check if the newly created user's password is equal to sample password -
    `self.assertTrue(user.check_password(password))`.
 
-Note: You can not check the password the same way as you checked the email
-      because the password is encrypted. You can only check it using the
-      *check_password* function on your user model. The reason you are using an
-      *assertTrue* here is because this *check_password* function is a helper
-      function that comes with the Django user model and it basically returns
-      True if the password is correct or False if it is not correct.
+> Note: You can not check the password the same way as you checked the email
+        because the password is encrypted. You can only check it using the
+        *check_password* function on your user model. The reason you are using an
+        *assertTrue* here is because this *check_password* function is a helper
+        function that comes with the Django user model and it basically returns
+        True if the password is correct or False if it is not correct.
 
 10. Save the test and head over to terminal to run tests -
     `docker-compose run app sh -c "python3 manage.py test"`.
@@ -308,25 +306,27 @@ Note: You can not check the password the same way as you checked the email
     `class UserManager(BaseUserManager):`.
 13. Declare class method *create_user* - `def create_user(self, email, password=None, **extra_fields):`.
 
-Note: `password=None` in case you want to create a user that is not active.
-      `**extra_fields` for additional fields - not required.
+> Note: `password=None` in case you want to create a user that is not active.
+        `**extra_fields` for additional fields - not required.
 
 14. Create user `user = self.model(email=self.email, **extra_fields)`.
 
-Note: The way that the management commands work is you can access the model that
-      the manager is for by just typing *self.model*. This is effectively the
-      same as creating a new user model and assigning it to the user variable.
+> Note: The way that the management commands work is you can access the model that
+        the manager is for by just typing *self.model*. This is effectively the
+        same as creating a new user model and assigning it to the user variable.
 
 15. Below this set password - `user.set_password(password)`.
 
-Note: Remember that password has to be encrypted. So it is important to not
-      store it in a clear text.
+> Note: Remember that password has to be encrypted. So it is important to not
+        store it in a clear text.
 
 16. Save the user - `user.save(using=self._db)`.
 
-Note: `using=self._db` is required for supporting multiple databases.
+> Note: `using=self._db` is required for supporting multiple databases.
 
 17. Return user.
+
+---
 
 ### Create User Model
 
@@ -336,21 +336,23 @@ Note: `using=self._db` is required for supporting multiple databases.
 3. Assign the UserManager to the object's attribute - `objects = UserManager()`.
 4. Add the `USERNAME_FIELD = 'email'` below.
 
-Note: By defeault the user name field is username and you are customizing that
+> Note: By defeault the user name field is username and you are customizing that
       to email so you can use an email address.
 
 5. Head over to *settings.py* file, scroll to the bottom and add
    `AUTH_USER_MODEL = 'core.User'` to assign User as the custom user model.
 
-Recommended: Make migrations - `docker-compose run app sh -c "python3 manage.py makemigrations core"`.
+> Recommended: Make migrations - `docker-compose run app sh -c "python3 manage.py makemigrations core"`.
 
 6. Run tests - `docker-compose run app sh -c "python3 manage.py test`. Expect OK.
 
+---
+
 ### Normalize Email Address
 
-Note: This step is not required but is recommended because the domain name for
-      email addresses is case-insensitive. Because of that you need to make that
-      part all lowercase every time a new user registers.
+> Note: This step is not required but is recommended because the domain name for
+        email addresses is case-insensitive. Because of that you need to make that
+        part all lowercase every time a new user registers.
 
 1. Head over to *test_models.py* and create the *test_new_user_email_normalized*
    method within the *ModelTests* class -`def test_new_user_email_normalized(self):`.
@@ -365,18 +367,20 @@ Note: This step is not required but is recommended because the domain name for
 6. Head over to *models.py* and change the logic of *user* variable using
    *normalize_email* to `user = self.model(email=self.normalize_email(email), **extra_fields)`.
 
-Note: *normalize_email* is a helper function that comes with the BaseUserManager.
+> Note: *normalize_email* is a helper function that comes with the BaseUserManager.
 
 7. Run test - `docker-compose run app sh -c "python3 manage.py test`. Expect OK.
+
+---
 
 ### Add Validation For Email Field
 
 1. Head over to *test_models.py/ModelTests*.
 2. Create new class method called *test_new_user_invalid_email*.
 
-Note: You want to make sure that if you call the *create_user* function and you
-      do not pass an email address (if you just pass a blank string or non value),
-      there will be raised ValueError saying that email address was not provided.
+> Note: You want to make sure that if you call the *create_user* function and you
+        do not pass an email address (if you just pass a blank string or non value),
+        there will be raised ValueError saying that email address was not provided.
 
 3. Use `self.assertRaises` and add `ValueError` as an argument. Anything that
    you run in here should raise the value error - `with self.assertRaises(ValueError):`.
@@ -385,19 +389,23 @@ Note: You want to make sure that if you call the *create_user* function and you
 ---
 
 5. Head over to *models.py* and within *create_user* method add
-        `if not email:
-                raise ValueError('Users must have an email address')`
+```python
+if not email:
+    raise ValueError('Users must have an email address')
+    ```
    at the beginning of the method's logic.
 6. Run test - `docker-compose run app sh -c "python3 manage.py test`. Expect OK.
 
+---
+
 ### Add Support For Creating Superusers
 
-Note: Now that you have your *create_user* method finished, there is just one
-      more method that you need to add to your user model manager and that is
-      the *create_superuser* method. *create_superuser* is a function used
-      by to Django CLI when you are creating new users using command line.
-      You want to make sure it is included in your custom user model so that you
-      can take advantage of the Django management command for creating a super user.
+> Note: Now that you have your *create_user* method finished, there is just one
+        more method that you need to add to your user model manager and that is
+        the *create_superuser* method. *create_superuser* is a function used
+        by to Django CLI when you are creating new users using command line.
+        You want to make sure it is included in your custom user model so that you
+        can take advantage of the Django management command for creating a super user.
 
 1. Head over to *test_models.py/ModelTests* and create *test_create_new_superuser*
    method.
@@ -406,16 +414,16 @@ Note: Now that you have your *create_user* method finished, there is just one
 3. Use `assertTrue` to check if newly created sample superuser *is_superuser* and
    *is_staff* - `self.assertTrue(user.is_superuser)` and `self.assertTrue(user.is_staff)`.
 
-Note: `is_superuser` is a part of the PermissionsMixin so it actually is a part
-      of the user.
+> Note: `is_superuser` is a part of the PermissionsMixin so it actually is a part
+        of the user.
 
 ---
 
 4. Go to *models.py/UserManager* and create new method called *create_superuser* -
    `def create_superuser(self, email, password):`.
 
-Note: Because you are only really going to be using the *create_superuser* with
-      command-line, you do not need to worry about the extra fields.
+> Note: Because you are only really going to be using the *create_superuser* with
+        command-line, you do not need to worry about the extra fields.
 
 5. Create user using *create_user* - `user = self.create_user(email, password)`.
 6. Set user to be a staff and a superuser - `user.is_staff = True`
@@ -425,4 +433,4 @@ Note: Because you are only really going to be using the *create_superuser* with
 9. Run test - `docker-compose run app sh -c "python3 manage.py test && flake8`.
    Expect OK.
 
-Recommended: Push to GitHub.
+> Recommended: Push to GitHub.
