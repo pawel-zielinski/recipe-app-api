@@ -389,10 +389,10 @@ thinking about the tests in advance.
 ---
 
 5. Head over to *models.py* and within *create_user* method add
-```python
+```
 if not email:
     raise ValueError('Users must have an email address')
-    ```
+```
    at the beginning of the method's logic.
 6. Run test - `docker-compose run app sh -c "python3 manage.py test`. Expect OK.
 
