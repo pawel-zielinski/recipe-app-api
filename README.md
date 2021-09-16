@@ -435,7 +435,7 @@ if not email:
 
 > Recommended: Push to GitHub.
 
-## Setup Django Admin
+## Set Up Django Admin
 
 ### Add Tests For Listing Users In Django Admin
 
@@ -472,7 +472,7 @@ that is not authenticated or that you can use to list in your admin page.
 
 2. Create a *client* variable accessible in the other tests: `self.client = Client()`.
 3. Create an *admin_user* variable accessible in the other tests:
-```
+```python
 self.admin_user = get_user_model().objects.create_superuser(
         email='admin@gmail.com',
         password='admin123'
@@ -486,7 +486,7 @@ self.admin_user = get_user_model().objects.create_superuser(
         function.
 
 5. Next create a *user* variable accessible in the other tests:
-```
+```python
 self.user = get_user_model().objects.create_user(
         email='test@gmail.com',
         password='admin123',
@@ -679,3 +679,129 @@ include in the form. These are just a defaults from the user admin documentation
    Expect OK.
 
 > Recommended: Push to GitHub.
+
+---
+
+## Set Up Database - Postgres
+
+> Note: In this section you are going to set up your Django project to use
+        Postgres instead of the default sqlite database.
+
+### Add Postgres To Docker Compose
+
+> Note: You are going to start by making some changes to your *docker-compose.yml*
+        file that allow you to create a database service and also pass in some
+        database settings into both your app and the database that you are going
+        to run.
+
+1. Start by opening up the *docker-compose.yml* file.
+2. Add the database service: `db:` (on the `app:` level as an another service).
+3. Add an image `image: postgres:10-alpine`.
+
+> Note: This locates the Postgres image on DockerHub and it pulls down the
+        version with the tag 10 alpine. So this is a lightweight version of the
+        Postgres SQL version 10 of the image. See all available configuration
+        options which can be passed in as environment variables of that image -
+        https://docs.docker.com/compose/environment-variables/.
+
+4. Define environment variables (`environment:`):
+* Database name: `- POSTGRES_DB=app`.
+* Username: `- POSTGRES_USER=postgres`.
+* Password: `- POSTGRES_PASSWORD=supersecretpassword`.
+
+> Note: You would not use the same password here that you would use on a production
+        system. What you would do in production is on your build server or whatever
+        is building your application like Jenkins or Travis you would the add an
+        encrypted environment variable that overrides this when you push your
+        application.
+
+5. To modify your app service to set some environment variables and also depend
+   on your DB service, start by adding `environment:` within `app:`.
+6. Then add:
+* Host: `- DB_HOST=db` (it has to be equal to the name of the service
+   that runs your database).
+* Name: `- DB_NAME=app` (it has to be equal to your *POSTGRES_DB*).
+* Username: `- DB_USER=postgres`.
+* Password: `- DB_PASS=supersecretpassword` (same to the one that you have created
+  in point 4.).
+7. Add *depends_on* within *app* service: `depends_on:`. Set it to *db*: `- db`.
+
+> Note: When you run *docker-compose* you can set different services to depend
+        on other services. You want your app service to depend on the database
+        service that you create here. What this means is two things:
+        1. The *database* service will start before the *app* service.
+        2. The *database* service will be available via the network when you use
+           the hostname DB. So when you are inside you *app* service you can
+           connect to the hostname DB and then it will connect to whatever
+           container is running on your DB service.
+
+---
+
+### Add Postgres Support To Dockerfile
+
+> Note: Next you are going to add Postgres support to your DockerFile. You
+        basically need to install the Python package that is used for Django to
+        communicate with Docker and in order to do this you are going to have to
+        add some dependencies to your Dockerfile during the build process. So
+        what you need to do is you need to update your *requirements.txt* file
+        to add the necessary package and then you need to make some small
+        changes to your Dockerfile to add the dependencies required to install
+        these packages.
+
+1. Open up *requirements.txt* file.
+2. The package that Django recommends for communicating between Django and
+   Postgres is called **psycopg2**. Add the version between 2.7.5 (including)
+   and 2.8.0: `psycopg2>=2.7.5,<2.8.0`.
+3. Head over to *Dockerfile* and between `COPY ./requirements.txt /requirements.txt`
+   and `RUN pip install -r /requirements.txt` add:
+* `RUN apk add --update --no-cache postgresql-client`: installs the PostgreSQL
+  client. It uses the package manager that comes with Alpine. `--update` means
+  to update the registry before you add PostgreSQL. `--no-cache` means to do not
+  store the registry index on your Dockerfile. The reason you do this is because
+  you really want to minimalize the number of extra files and packages that are
+  included in your Docker container. This is best practice because it means that
+  your Docker container for your application has the smallest footprint possible
+  and it also means that you do not include any extra dependencies or anything
+  on your system which may cause unexpected side effects or it may even create
+  security vulnerabilities in your system.
+* `RUN apk add --update --no-cache --virtual .tmp-build-deps gcc libc-dev linux-headers postgresql-dev`: installs some temporary packages that need to be
+  installed on the system while you run your *requirements.txt*. `--virtual`
+  sets up an alias for your dependencies that you can use to easily remove all
+  those dependencies later after *requirements* installation
+  (alias: `.tmp-build-deps`).
+
+> Note: This is all part of making sure your Dockerfile has the absolute minimal
+        footprint possible. You do not want any extra dependencies in your
+        Dockerfile unless they are absolutely necessary.
+
+4. After the `RUN pip install -r /requirements.txt` add `RUN apk del .tmp-build-deps`
+   to remove the temporary packages.
+5. Head over to terminal and type `docker-compose build` to make sure that your
+   image can build successfully.
+
+---
+
+### Configure Database In Django
+
+> Note: Now, that you have Docker all set up, you can go ahead and configure
+        your Django project to use your Postgres database.
+
+1. Head over to the *settings.py* and find *DATABASES* variable.
+2. Remove `'ENGINE': 'django.db.backends.sqlite3',` and
+   `'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),`.
+3. Instead of these 2 lines add:
+* `'ENGINE': 'django.db.backends.postgresql',`: sets up the database engine that
+  your are going to use.
+* `'HOST': os.environ.get('DB_HOST'),`: sets up the host.
+* `'NAME': os.environ.get('DB_NAME'),`: sets up the name.
+* `'USER': os.environ.get('DB_USER'),`: sets up the username.
+* `'PASSWORD': os.environ.get('DB_PASS'),`: sets up the password.
+
+> Note: The benefit of this is that you can easily change your configuration
+        when you run your app on different servers by simply changing them in
+        the environment variables and you do not have to make any changes to
+        your source code in order to modify the hostname, the name, the username
+        or the password. This makes it really useful when running your
+        application in production because you can simply upload your Dockerfile
+        to a service like Amazon ECS or Kubernets and you can just set the
+        appropriate environment variables and then application should work.
