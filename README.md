@@ -344,7 +344,7 @@ thinking about the tests in advance.
 
 > Recommended: Make migrations - `docker-compose run app sh -c "python3 manage.py makemigrations core"`.
 
-6. Run tests - `docker-compose run app sh -c "python3 manage.py test`. Expect OK.
+6. Run test - `docker-compose run app sh -c "python3 manage.py test`. Expect OK.
 
 ---
 
@@ -431,6 +431,251 @@ if not email:
 7. Because you modified the user, you need to save it - `user.save(using=self._db)`.
 8. Return user.
 9. Run test - `docker-compose run app sh -c "python3 manage.py test && flake8`.
+   Expect OK.
+
+> Recommended: Push to GitHub.
+
+## Setup Django Admin
+
+### Add Tests For Listing Users In Django Admin
+
+> Note: Now you are going to update you Django admin so that you can manage your
+        custom user model. This will give you a nice easy interface that you can
+        use to log in and see which users have been created, create users or make
+        changes to existing users.
+
+1. Create a new file within **tests** directory and name it *test_admin.py*.
+2. Import *TestCase* and *Client* from *django.test*, *get_user_model* from
+   *django.contrib.auth* and *reverse* from *django.urls*.
+
+> Note: *reverse* is is a helper function which will allow you to generate URLs
+        for your Django admin page. *Client* will allow you to make test requests
+        to your application in your unit tests. Django documentation:
+        https://docs.djangoproject.com/en/2.2/topics/testing/tools/#overview-and-a-quick-example
+
+3. Create test class: `class AdminSiteTests(TestCase):`.
+
+---
+
+#### Add setUp Method
+
+1. Create *setUp* method: `def setUp(self):`.
+
+> Note: *setUp* method is a method that is ran before every test that you run.
+        So sometimes there are setup tasks that need to be done before every
+        test in your TestCase class. You can do this using *setUp* method.
+
+This *setUp* method is going to consist of creating your test client. You are
+going to add a new user that you can use. To test you are going to make sure the
+user is logged into your client. Finally you are going to create a regular user
+that is not authenticated or that you can use to list in your admin page.
+
+2. Create a *client* variable accessible in the other tests: `self.client = Client()`.
+3. Create an *admin_user* variable accessible in the other tests:
+```
+self.admin_user = get_user_model().objects.create_superuser(
+        email='admin@gmail.com',
+        password='admin123'
+    )
+```
+4. Log in an *admin_user* using the Client helper function that allows you to log
+   a  user in with the Django authentication.
+
+> Note: This really helps make your tests a lot easier to write because it means
+        you do not have to manually log the user in. You can just use this helper
+        function.
+
+5. Next create a *user* variable accessible in the other tests:
+```
+self.user = get_user_model().objects.create_user(
+        email='test@gmail.com',
+        password='admin123',
+        name='Sample Name'
+    )
+```
+
+Now you have a *client*, an *admin* (the *admin* is logged into the client) and
+a spare user that you can use for testing listing and things like that.
+
+---
+
+#### Add Tests For Listing Users
+
+> Note: Now you have to test that the users are listed in your Django admin. The
+        reason you need to add a test for this is because you need to slightly
+        customize the Django admin to work with your custom user model. The
+        default user model expects a username and as such the default Django
+        admin for the user model also expects a username witch you do not have.
+        You have the email address instead. You need a few small changes to your
+        *admin.py* file just to make sure it supports your custom user model.
+
+1. Create a new test called *test_users_listed*: `def test_users_listed(self):`.
+2. Within this method create the URL first, using the *reverse* helper function:
+   `url = reverse('admin:core_user_changelist')`.
+
+> Note: The way that you use *reverse* is you simply type the app that you are
+        going for ()`admin`), then `:` and the URL that you want (`core_user_changelist`).
+        These URLs are actually defined in the Django admin documentation
+        (https://docs.djangoproject.com/en/2.1/ref/contrib/admin/). Basically
+        what this will do is it will generate the URL for your list user page.
+        The reason you use this reverse function instead of just typing the URL
+        manually is because if you ever want to change the URL in a future it
+        means you do not have to go through and change it everywhere in you test
+        because it should update automatically based on reverse.
+
+3. Create a *response* variable as a *client's* reaction on the URL:
+   `res = self.client.get(url)`.
+
+> Note: This will use you test client to perform a HTTP GET on the URL.
+
+4. Use assertion to check if response matches with the logged user's name and
+   email: `self.assertContains(res, self.user.name)` and
+   `self.assertContains(res, self.user.email)`.
+
+> Note: The *assertContains* assertion is a Django custom assertion that will
+        check that your response here contains a certain item. It also has some
+        additional checks that it does that are not quite clear from just this
+        lines. What it does is it checks that the HTTP response was *HTTP 200*.
+        It also looks into the actual content of this *res* because it is an
+        object so it is intelligent enough to look into the actual output that
+        is rendered and to check for the contents there.
+
+5. Run test - `docker-compose run app sh -c "python3 manage.py test && flake8`.
+   Expect to fail.
+
+---
+
+### Modify Django Admin To List Your Custom User Model
+
+1. Go over to *admin.py* file and import the default Django user admin to change
+   some of the class variables to support your custom user admin:
+   `from django.contrib.auth.admin import UserAdmin as BaseUserAdmin`.
+2. Import *models* from your *core* API: `from core import models`.
+3. Create Custom user admin class: `class UserAdmin(BaseUserAdmin):`.
+4. Change the ordering to the ID: `ordering = ['id']`.
+5. Set *list_display* to show email and name: `list_display = ['email', 'name']`.
+6. Register your *custom user model* and newly modified *user admin model*:
+   `admin.site.register(models.User, UserAdmin)`.
+7. Run test - `docker-compose run app sh -c "python3 manage.py test && flake8`.
+   Expect OK.
+
+---
+
+### Modify Django Admin To Support Changing User Model
+
+> Note: Next you need to check if the "change user" page renders correctly.
+
+1. Create a new test called *test_user_change_page*:
+   `def test_user_change_page(self):`.
+2. Generate a URL which will depend on ID of which user we want to access:
+   `url = reverse('admin:core_user_change', args=[self.user.id])`.
+
+> Note: The *reverse* function will create a URL like this: /admin/core/user/<ID>.
+        This <ID> is how the *args* work in the *reverse* function. So basically
+        anything you pass in here will get assigned to the argument of the URL,
+        here at the end.
+
+3. Do an HTTP GET on the URL and assign it to variable: `res = self.client.get(url)`.
+4. Test that this page renders okay: `self.assertEqual(res.status_code, 200)`.
+
+> Note: A status code for the response that your client gives is HTTP 200, which
+        us a status code for "okay". So the page worked.
+
+5. Run test - `docker-compose run app sh -c "python3 manage.py test && flake8`.
+   Expect to fail.
+
+---
+
+Now you need to customize your user admin *fieldsets* to support your custom model
+as opposed to the default model that it is expecting.
+
+6. Head over to the *admin.py/UserAdmin*.
+7. Add *fieldsets* class variable:
+```python
+fieldsets = (
+      (None, {'fields': ('email', 'password')}),
+      (_('Personal Info'), {'fields': ('name',)}),
+      (
+          _('Permissions'),
+          {'fields': ('is_active', 'is_staff', 'is_superuser')}
+      ),
+      (_('Important dates'), {'fields': ('last_login',)})
+  )
+```
+*Fieldsets* are based on sections. So as you can see you have 4 sections:
+* `(None, {'fields': ('email', 'password')}),`: `None` because this is the title
+  for the section and you do not need this. This section will contain `email` and
+  `password`.
+
+> Note: Before you create next section you need to import the *gettext* as *_*
+        from *django.utils.translation*. This is recommended convention for
+        converting strings in your Python to human readable text. The reason you
+        do this is just so it gets passed through the translation engine.
+
+* `(_('Personal Info'), {'fields': ('name',)}),`: This section is for personal
+  information. This will contain only `name`.
+* `(_('Permissions'), {'fields': ('is_active', 'is_staff', 'is_superuser')}),`:
+  This is a permission section which contains fields like `is_active`, `is_staff`
+  and `is_superuser`.
+* `(_('Important dates'), {'fields': ('last_login',)})`: This section is called
+  `Important dates` and it contains a field of a date that the user was last
+  logged in.
+
+> Note: If you ever want to add extra fields to your user model, just add them here.
+
+8. Run test - `docker-compose run app sh -c "python3 manage.py test && flake8`.
+   Expect OK.
+
+---
+
+### Modify Django Admin To Support Creating Users
+
+> Note: There is one last thing you need to change in your Django admin before
+        it will work with your custom user model and that is the **add** page.
+
+1. Head over to tests and create a new method called *test_create_user_page*:
+   `def test_create_user_page(self):`.
+2. Create the URLs variable: `url = reverse('admin:core_user_add')`.
+
+> Note: `core_user_add` is the standard URL alias for the add page for your
+        user model.
+
+3. Create variable with client's try of making HTTP GET to this *url*:
+   `res = self.client.get(url)`.
+4. Check if this response is correct: `self.assertEqual(res.status_code, 200)`.
+5. Run test - `docker-compose run app sh -c "python3 manage.py test && flake8`.
+   Expect to fail.
+
+---
+
+6. Head over to *admin.py/UserAdmin*.
+7. Create *add_fieldsets* variable:
+```python
+add_fieldsets = (
+      (None, {
+          'classes': ('wide', ),
+          'fields': ('email', 'password1', 'password2')
+      }),
+  )
+```
+
+> Note: The user admin by default takes an *add_fieldsets* which defines the
+        fields that you include on the add page which is the same as the create
+        user page.
+
+All you are doing here is customizing this fieldset to include your email address,
+password1 and password2, so you can create a new user in the system with a very
+minimal data that is required and then if you want to add extra fields like the
+name and customize that stuff later, you can do that in the *Edit Page*.
+
+This *add_fieldsets* variable that you have created, has one section with no name -
+`None` - because it is going to be very small and you are not going to be creating
+multiple tiles. Then in `{}` brackets there is a definition of the fields that you
+include in the form. These are just a defaults from the user admin documentation -
+`'classes': ('wide', ),`. Then you add fields that you want in that form -
+`'fields': ('email', 'password1', 'password2')`.
+
+8. Run test - `docker-compose run app sh -c "python3 manage.py test && flake8`.
    Expect OK.
 
 > Recommended: Push to GitHub.
