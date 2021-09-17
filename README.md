@@ -145,7 +145,7 @@
 
 * `before_script: pip install docker-compose`: executes before running script.
   This is because you need to install docker-compose.
-* `script: - docker-compose run app sh -c "python3 manage.py test && flake8"`:
+* `script: - docker-compose run app sh -c "python manage.py test && flake8"`:
   specifies the script. You need to run your docker-compose command for running
   your tests. Command also runs linting tool (flake8) which you need to install
   in your project.
@@ -805,3 +805,256 @@ include in the form. These are just a defaults from the user admin documentation
         application in production because you can simply upload your Dockerfile
         to a service like Amazon ECS or Kubernets and you can just set the
         appropriate environment variables and then application should work.
+
+## Waiting For Postgres To Start & Mocking
+
+### Mocking
+
+In this section you are going to use an advanced area of testing called *mocking*.
+**Mocking is when you override or change the behavior of the dependencies of the**
+**code that you are testing**. We use mocking to **avoid any unintended side effects**
+and also to **isolate the specific piece of code that we want to test**. For example
+imagine you are testing a function that sends an email. There are two good
+reasons that you would not want to actually send an email every time you run
+your tests:
+1. The first reason is that **you should never write tests that depend on external services**.
+   This is because you can not guarantee that these services will be available
+   at the point that you run the test. This makes the test **unpredictable**
+   and **unreliable**.
+2. The second reason is you do not want to be **sending spam emails** each time
+   you run your test suite. Even if you are using a fake address, those emails
+   would still be backing up on a server somewhere.
+
+When you write your test you can use mocking to avoid sending an actual email.
+You can override the function in dependency that sends the email and replace it
+with a mock object. Using this mock object you can avoid sending an actual email
+and instead just check that the function was called with the correct parameters.
+
+---
+
+### Add Tests For wait_for_db Command
+
+> Note: In this part you are going to add a test for management command.
+        Management command is going to be a helper command that allows you to
+        wait for the database to be available before continuing and running other
+        commands. This command will be used in your *docker-compose.yml* file
+        when starting your Django app. The reason that you need this command is
+        because it seems that sometimes when using Postgres with docker-compose
+        in a Django app, the Django app fails to start because of a database
+        error. It turns out that this is because once the Postgres service has
+        started there are a few extra setup tasks that need to be done on the
+        Postgres before it is ready to accept connections. What this means is
+        your Django app will try and connect to your database before the
+        database is ready and therefore it woll fail with an exception and you
+        will need to restart the app. To improve the reliability of your project
+        you are going to add this helper command that you can put in front of
+        all of the commands you have run in docker-compose and that will ensure
+        that the database is up and ready to accept connections before you try
+        and access the database. This will make your application a lot more
+        reliable when running it locally as a development server and also if you
+        ever deploy it as a production system.
+
+1. Head over to **test** folder and create a new *test_commands.py* file which
+   will contain tests for commands.
+2. Do some imports:
+* `from unittest.mock import patch`: this is going to allow you to mock the
+  behavior of the Django "get database" function.
+
+> Note: You can basically simulate the database being available and not being
+        available for when you test your command.
+
+* `from django.core.management import call_command`: allows you to call the
+  command in your source code.
+* `from django.db.utils import OperationalError`: this is an error that Django
+  throws when the database is unavailable. You are going to use this error to
+  simulate the database being available or not when you run your command.
+* `from django.test import TestCase`.
+3. Create a *CommandTests* class - `class CommandTests(TestCase):`.
+4. Add method to test the scenario when you want to connect to the database when
+   it is already available:
+* Definition: `def test_wait_for_db_ready(self):`.
+
+> Note: To setup you test here you need to simulate the behavior of Django when
+        the database is available. Your management command is going to basically
+        try and retrieve the database connection from Django and it is going to
+        check if when you try and retrieve it, it retrieves an *OperationalError*
+        or not. So if it retrieves an *OperationalError* then the database is not
+        available. If an *OperationalError* is not thrown, then the database is
+        available and the command will continue. To setup the test you are going
+        to override the behavior of the *ConnectionHandler* and you are just going
+        to make it return True and not throw any exception and therefore your
+        call command (or your management commands) should just continue and allow
+        you to continue with the execution flow.
+
+* Use the *patch* to mock the *ConnectionHandler* to just return *True* every
+  time  it is called: `with patch('django.db.utils.ConnectionHandler.__getitem__') as gi:`.
+
+> Note: As you will find when you create your management command, the way that
+        you tested the database is available in Django, is you just try and
+        retrieve the default database via the *ConnectionHandler*. The location
+        of the code that is being called is in this
+        `django.db.utils.ConnectionHandler` module and the function that is
+        actually called when you retrieve the database is `\_\_getitem\_\_`.
+        You are going to mock this behavior using *path* which is assigned as
+        a variable called *gi*.
+
+* `gi.return_value = True`: mock the returned value. Whenever this is called
+  during your test execution, instead of actually before performing whatever
+  behavior this does in Django, it will override it and just replace it with
+  a mock object which does two things. One of them is it will just return this
+  value that you specify here (*True*) and the second thing is it allows you to
+  monitor how many times it was called and the different calls that were made
+  to it.
+
+* `call_command('wait_for_db')`: call the tested `wait_for_db` command.
+* `self.assertEqual(gi.call_count, 1)`: assertion if the command was executed
+  as planned. If the database was available all the time, the `wait_for_db`
+  command should be executed only once.
+
+5. Add method to test the scenario when you want to connect to the database when
+   it is not available for 5 seconds:
+* Decorator: `@patch('time.sleep', return_value=True)`. What this mock does here
+  is it replaces the behavior of *time.sleep* and just replaces it with a mock
+  function that returns *True*. That means during your test it will not actually
+  wait the second or however long you have it to wait in your code. The reason
+  you do this is simply just to speed up the test when you run them because if
+  you are checking the database five times then that is five extra seconds that
+  it would take to run your test.
+
+> Note: The way the management command is going to work is it is going to be a while
+        loop that checks to see if the *ConnectionHandler* raises the
+        *OperationalError*. Then it is going to wait a second and then try again.
+        This is just so that it does not flood the output by trying every
+        microsecond to test fro the database. It adds a little delay there and
+        you can actually remove that delay in your unit test by adding this
+        decorator to mock the `time.sleep`. When you use *patch* as a decorator
+        you can actually pass in the *return_value* as part of the function
+        call. *Patch* as a decorator does pretty much the same thing as you do
+        with *with* expression. This decorator also passes in the argument to
+        your function so you have to remember to add it to your function's
+        parameters even if you will not use it.
+
+* Declaration: `def test_wait_for_db(self, ts):` (`ts` is a parameter for
+  decorator's variable).
+* `with patch('django.db.utils.ConnectionHandler.__getitem__') as gi:`.
+* Add a *side_effect*. The Python unit tests mock module has a really useful
+  option where you can set a side effect to the function that you are mocking.
+  Use it to raise the *OperationalError* 5 times and then on the sixth time
+  just return: `gi.side_effect = [OperationalError] * 5 + [True]`.
+* Call your command: `call_command('wait_for_db')`. It should have been called
+  the first five times to wait and then it should on the sixth time have been
+  successful.
+* Check that using assertion: `self.assertEqual(gi.call_count, 6)`. There should
+  simply be 6 calls of the `\_\_getitem\_\_` - 5 times *OperationalError*, 1 time
+  OK and return.
+
+6. Run test - `docker-compose run app sh -c "python3 manage.py test && flake8`.
+   Expect fail.
+
+---
+
+### Add wait_for_db Command
+
+> Note: Now you can go ahead and create your wait_for_db management command.
+
+1. Create the dictionary in your **core** app. You are going to store your
+   management commands in here. Call it **management**.
+
+> Note: This is the Django convention and it is recommended on the Django website
+        to put all of your commands in a directory called **management/commands**
+        within your **core** app.
+
+2. Create file *\_\_init\_\_.py* in that folder.
+3. Create a **management/commands** folder and add there an *\_\_init\_\_.py* file.
+4. Within **commands** create a *wait_for_db.py* app.
+5. Do some imports:
+* `import time`: you will use that to make your applications for a few seconds
+  in between each database check.
+* `from django.db import connections`: you can use it to test if the database
+  connection is available.
+* `from django.db.utils import OperationalError`: this error will be thrown when
+  the database will not be available.
+* `from django.core.management.base import BaseCommand`: the class that you need
+  to build on, in order to create your custom command.
+  (More about custom managment commands - https://docs.djangoproject.com/en/2.1/howto/custom-management-commands/#module-django.core.management)
+6. Create a *Command* class according to the convention: `class Command(BaseCommand):`.
+7. Create a class method called *handle*: `def handle(self, *args, **options):`.
+
+> Note: `*args` and `**options` allow you to pass in custom arguments and options
+        to your management commands.
+
+8. Add line to print message while executing command: `self.stdout.write('Waiting for database...')`.
+9. Assign a variable called *db_conn*: `db_conn = None` (it can also equal
+   empty string or *False*).
+10. Open *while* loop in which connection attempts will be made: `while not db_conn:`.
+11. Open *try/except* expression to try to connect to the database:
+* Try to set *db_conn* to the database connection:
+```python
+try:
+  db_conn = connections['default']
+```
+* If there is no connection, raise *OperationalError* exception: `except OperationalError:`:
+  - Write a message that will be displayed in terminal: `self.stdout.write('Database unavailable, waiting 1 secound...')`.
+  - Sleep for 1 second: `time.sleep(1)`.
+12. Exit *while* loop and add message: `self.stdout.write(self.style.SUCCESS('Database available!'))`
+
+> Note: So when you run this if Django raises the *OperationalError* then method
+        will catch that and is going to output the message. Then it will wait for
+        a second and try again. It will continue this process until the database
+        is available.
+
+13. Run test - `docker-compose run app sh -c "python3 manage.py test && flake8`.
+    Expect OK.
+
+---
+
+### Make Docker Compose Wait For Database
+
+> Note: Now, as you have your wait_for_db command, you can go ahead and configure
+        Docker Compose to use this command before it starts your Django app.
+
+1. Head over to the *docker-compose.yml* file.
+2. In *app/command* change this command to:
+```yml
+command: >
+  sh -c "python manage.py wait_for_db &&
+         python manage.py migrate &&
+         python manage.py runserver 0.0.0.0:8000"
+```
+
+> Note: `python manage.py wait_for_db` means that your wait_for_db command will
+        be executed before starting server. Then there is `python manage.py migrate`
+        It is a good idea to run it before starting the server because if you start
+        your app without running the migrations you may run into some issues.
+
+3. Head over to terminal and type `docker-compose up` to start your app and run
+   migrations. You should see by the messages that the *wait_for_db* is working.
+4. Run test - `docker-compose run app sh -c "python3 manage.py test && flake8`.
+   Expect OK.
+
+> Recommended: Push to GitHub.
+
+---
+
+### Make Travis-CI Wait For Database
+
+> Note: You might find that Travis is still failing with the *OperationalError*.
+        In this section there is a solution for that problem.
+
+1. Head over to *.travis-ci.yml*.
+2. In *script* change your script to following one:
+   `docker-compose run app sh -c "python manage.py wait_for_db && python3 manage.py test && flake8"`
+
+> Note: This correction should ensure that the app waits for the database to be
+        available before running the tests. It is also important to mention that
+        there is a difference between *python* and *python3* while writing those
+        scripts and you should stick to this instruction.
+
+3. You can test if the server is working by going to your browser and heading
+   over to *127.0.0.1:8000*.
+4. Head over to *127.0.0.1:8000/admin/* to check if you can access admin panel.
+5. You can create a superuser by typing
+   `docker-compose run app sh -c "python manage.py createsuperuser"` in your
+   terminal.
+6. After creating superuser you can login to admin panel. Check if everything
+   is working.
