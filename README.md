@@ -894,7 +894,7 @@ and instead just check that the function was called with the correct parameters.
         retrieve the default database via the *ConnectionHandler*. The location
         of the code that is being called is in this
         `django.db.utils.ConnectionHandler` module and the function that is
-        actually called when you retrieve the database is `\_\_getitem\_\_`.
+        actually called when you retrieve the database is `__getitem__`.
         You are going to mock this behavior using *path* which is assigned as
         a variable called *gi*.
 
@@ -945,7 +945,7 @@ and instead just check that the function was called with the correct parameters.
   the first five times to wait and then it should on the sixth time have been
   successful.
 * Check that using assertion: `self.assertEqual(gi.call_count, 6)`. There should
-  simply be 6 calls of the `\_\_getitem\_\_` - 5 times *OperationalError*, 1 time
+  simply be 6 calls of the `__getitem__` - 5 times *OperationalError*, 1 time
   OK and return.
 
 6. Run test - `docker-compose run app sh -c "python3 manage.py test && flake8`.
