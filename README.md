@@ -1058,3 +1058,260 @@ command: >
    terminal.
 6. After creating superuser you can login to admin panel. Check if everything
    is working.
+
+## Create User Management Endpoints
+
+> Note: In this section you are going to create your *manage user* endpoints.
+        These endpoints are going to allow you to create and update users, to
+        change a user's password and to create user authentication tokens which
+        can be used to authenticate requests to the other APIs in your project.
+
+### Create Users App
+
+1. Open up terminal and run
+   `docker-compose run --rm app sh -c "python manage.py startapp user"`
+   command within **recipe-app-api** directory.
+
+> Note: `--rm` removes the container after it has ran the command. This is
+        optional on any command that you just want to run once and you do not
+        want the docker container to linger on the system after it's ran.
+        It should basically remove the container and just keep the system
+        a little cleaner so it does not fill up.
+
+2. Clean up a little bit by removing **migrations** directory (you are going to
+   keep all of them within the **core** app), *admin.py* file (you are going to
+   keep all admin files in the **core** app), *models.py* file (they also all
+   are going to be stored in **core** app).
+3. Create a new subfolder for test within the **user** app. Add *\_\_init\_\_.py*
+   in that folder.
+4. Head over to *settings.py* file and add `rest_framework` (to enable REST),
+   `rest_framework.authtoken` (to enable auth token app) and `user` in the
+   *INSTALLED_APPS*.
+
+---
+
+### Add Tests For Create User API
+
+> Note: First API that you are going to create in your users project is the
+        create users API. You are going to start by adding some unit tests
+        to test creating users and different scenerios when you give different
+        post requests.
+
+1. Head over to **user/tests** and create *test_user_api.py* file.
+2. Do imports:
+* `from django.test import TestCase`.
+* `from django.contrib.auth import get_user_model`: you are going to be needing
+  the User model for out tests.
+* `from django.urls import reverse`: so you can generate your API URL.
+* `from rest_framework.test import APIClient`: to have a test client that you
+  can use to make requests to your API and then check what the response is.
+* `from rest_framework import status`: contains some status code that you can
+  see in basically human readable form.
+3. Recommended at the beginning of any API test is to add either a helper
+   function or a constant variable for your URL that you are going to be testing.
+   Create a user URL: `CREATE_USER_URL = reverse('user:create')` (Uppercase
+   variables means that the variable is predicted to be constant - naming
+   convention).
+4. Add a helper function that you can use to create some example users for your
+   tests so you do not have to create user for each test individually:
+
+```python
+def create_user(**params):
+    """Create user."""
+    return get_user_model().objects.create_user(**params)
+```
+
+5. Create the test class: `class PublicUserApiTests(TestCase):`.
+
+> Note: The reason you call it public is because it is good habit to separate
+        your API tests into public and private tests. It keeps the tests nice
+        and clean because then in your setup you can have one that authenticates
+        and one that does not authenticate. A public API is one that is
+        unauthenticated so that is just anyone from the Internet can make
+        a request. For example create user because when you typically create
+        a user on a system usually you are creating user because you haven't
+        got authentication set up already. A private API might be something
+        like modify the user or change the password. For those types of requests
+        you would expect to be authenticated.
+
+6. Add setUp method to make it a little easier to call your client in your test
+   so you do not have to manually create this API client every single test.
+   In this way you just have one client for your test suite that you can reuse
+   for all of the tests:
+
+```python
+def setUp(self):
+      """Set up the client."""
+      self.client = APIClient()
+```
+
+7. Create a test that validates the user is created successfully:
+
+```python
+def test_create_valid_user_success(self):
+    """Test creating user with valid payload is successful."""
+    payload = {
+        'email': 'test@gmail.com',
+        'password': 'admin123',
+        'name': 'Test Name'
+    }
+    res = self.client.post(CREATE_USER_URL, payload)
+
+    self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+    user = get_user_model().objects.get(**res.data)
+    self.assertTrue(user.check_password(payload['password']))
+    self.assertNotIn('password', res.data)
+```
+
+> Note: `payload` is the object that you pass to the API when you make the
+        request. You are just going to test that if you pass in all the correct
+        fields then the user is created successfully. `res` does a HTTP POST
+        request to your client to your URL for creating users. Next you check if
+        the outcome is what you expect - HTTP 201 CREATED. The next two lines
+        are creating a user out of the data passed as response in `res` and
+        checking if the password matches with the payload's one. Last line checks
+        that the password is not returned as part of this object. You do that
+        because you do not want the password being returned in the request
+        because it is a potential security vulnerability. You should ensure that
+        the passwords are kept as secret as possible even the encrypted version
+        of the password there is no need to really send that to the user. You
+        can always just check the passwords that they send you using
+        *check_password*. So just to be safe, you want to make sure that the
+        password is not returned, you return your user.
+
+8. Next you are going to test what happens if there is an attempt on trying to
+   create a user that already exists. Create a new test for that:
+
+```python
+def test_user_exists(self):
+    """Test creating a user that already exists fails."""
+    payload = {'email': 'test@gmail.com', 'password': 'admin123'}
+    create_user(**payload)
+
+    res = self.client.post(CREATE_USER_URL, payload)
+
+    self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+```
+
+> Note: Create a payload as data to create a basic user account. Next you want
+        to create a user (you can use a handy *create_user()* function that you
+        created earlier) to simulate that there already is an account with these
+        data. Next lets create a request to the user creation site with the
+        payload data. In this way views method should try to create a user.
+        In the last line check if the request's status code is HTTP 400 BAD
+        REQUEST. It should be 400 because the user already exists.
+
+9. Now you need a test to check if the password is too short. You are going to
+   add a password restriction. Phrase should be longer than 5 characters:
+
+```python
+ def test_password_too_short(self):
+     """Test that the password must be more that 5 characters."""
+     payload = {'email': 'test@gmail.com', 'password': 'pw', 'name': 'Test'}
+     res = self.client.post(CREATE_USER_URL, payload)
+
+     self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+     user_exists = get_user_model().objects.filter(
+         email=payload['email']
+     ).exists()
+     self.assertFalse(user_exists)
+```
+
+> Note: Firstly create a payload with data to create a user. Remember that
+        password is intentionally shorter that 5 characters. Then create
+        request of user creation using payload. Check if the request's status
+        code is HTTP 400 BAD REQUEST. It should be because the password is too
+        short. So now you want to check if the user was never created. You do
+        that by creating a *user_exists* variable which tries to define if a user
+        with the payload's email in the user's model exists. Then you make an
+        assertion that the *user_exists* should be False.
+
+Every single test that runs, it refreshes the database.
+
+10. Run test - `docker-compose run --rm app sh -c "python3 manage.py test && flake8`.
+    Expect fail.
+
+---
+
+### Add Create User API
+
+> Note: Next you are going to implement your create user API to make your tests
+        pass. What you are going to do is you are going to create a serializer
+        for your *create_user* request. Then you are going to create a view
+        which will handle the request. Then you are going to wire this up to
+        a URL which will allow you to access the API and also make your tests pass.
+
+1. Create a *serializers.py* file within *user* app.
+2. Head over to that file and do imports:
+* `from django.contrib.auth import get_user_model`: because you are going to need
+  the User model to create your model serializer.
+* `from rest_framework import serializers`.
+3. Create serializer class: `class UserSerializer(serializers.ModelSerializer):`.
+
+> Note: Django REST Framework has a built-in serializer that you can do this with.
+        You just need to specify the fields that you want from your model and it
+        does the database conversion for you. It also helps with the creating
+        and retrieving from the database.
+
+4. Now specify a meta class: `class Meta:`:
+* Specify the model that you want to base your model serializer from:
+  `model = get_user_model()`.
+* Specify the fields that you want to include in serializer. These are the fields
+  that are going to be converted to and from JSON when you make your HTTP POST
+  and then you retrieve that in your view and then you want to save it to a model.
+  So it basically are the fields that you want to make accessible in the API
+  either to read or write: `fields = ('email', 'password', 'name')`.
+
+> Note: These are 3 fields that you are going to accept when you create users.
+
+* Add *extra_kwargs* to allow you to configure a few extra settings in your model
+  serializer. What you are going to use this for is to ensure that the
+  password is *write_only* and that the minimum required length is 5 characters:
+  `extra_kwargs = {'password': {'write_only': True, 'min_length': 5}}`.
+5. Configure the *create* method. This method is called when you create
+   a new object:
+
+```python
+def create(self, validated_data):
+    """Create a new user with encrypted password and return it."""
+    return get_user_model().objects.create_user(**validated_data)
+```
+
+> Note: This is all from the DJango REST Framework documentation
+        (https://www.django-rest-framework.org/api-guide/serializers/#modelserializer)
+        It basically specifies all the available functions that you can override
+        in the different serializers that are available. You are going to override
+        the *create* function here. In this method you are calling the *create_user*
+        function in you model because by default it only calls the *create* function
+        and you want to use your *create_user* model manager function that you
+        created in your models to create the user. What Django REST Framework
+        does is when you are ready to create the user it will call this *create*
+        function and it will pass in the *validated_data*. The *validated_data*
+        will contain all of the data that was passed into your serializer which
+        would be the JSON data that was made in the HTTP POST. Then it passes it
+        as the argument and then you can use that to create your user.
+
+6. Next head over to *views.py* in **user** and do some imports:
+* `from user.serializers import UserSerializer`.
+* `from rest_framework import generics`: this is a view that is pre-made for you
+  that allows you to easily make a API that creates an object in a database
+  using the serializer that you are going to provide.
+7. Add a view for managing your create user API:
+
+```python
+class CreateUserView(generics.CreateAPIView):
+    """Create a new user in the system."""
+
+    serializer_class = UserSerializer
+```
+
+> Note: All you actually need to specify in this view is a class variable that
+        points to the serializer class that you want to use to create the object.
+
+8. Create a *urls.py* within **user** app.
+9. Import *path* and *views*, add *app_name* and set it to `user`.
+10. Add *urlpatterns* with one path for *CreateUserView* view:
+    `urlpatterns = [path('create/', views.CreateUserView.as_view(), name='create')]`.
+11. Head over to *urls.py* in **app** and import *include*.
+12. Create a new path to include **user**'s *urls.py*:
+    `path('api/user/', include('user.urls')),`
