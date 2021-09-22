@@ -1312,6 +1312,8 @@ class CreateUserView(generics.CreateAPIView):
 9. Import *path* and *views*, add *app_name* and set it to `user`.
 10. Add *urlpatterns* with one path for *CreateUserView* view:
     `urlpatterns = [path('create/', views.CreateUserView.as_view(), name='create')]`.
-11. Head over to *urls.py* in **app** and import *include*.
+11. Head over to *urls.py* in **app** app and import *include*.
 12. Create a new path to include **user**'s *urls.py*:
-    `path('api/user/', include('user.urls')),`
+    `path('api/user/', include('user.urls')),`.
+13. Run test - `docker-compose run --rm app sh -c "python3 manage.py test && flake8`.
+    Expect OK.
