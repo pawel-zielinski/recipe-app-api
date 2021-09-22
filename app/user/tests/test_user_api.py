@@ -87,7 +87,7 @@ class PublicUserApiTests(TestCase):
         """Test that token is not created if user does not exist."""
         payload = {
             'email': 'test@gmail.com',
-            'password': 'wrong',
+            'password': 'admin123',
             'name': 'Test'
         }
         res = self.client.post(TOKEN_URL, payload)

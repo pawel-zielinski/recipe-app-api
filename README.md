@@ -1226,7 +1226,7 @@ def test_user_exists(self):
         with the payload's email in the user's model exists. Then you make an
         assertion that the *user_exists* should be False.
 
-Every single test that runs, it refreshes the database.
+Every single test is isolated because each test resets the database from scratch.
 
 10. Run test - `docker-compose run --rm app sh -c "python3 manage.py test && flake8`.
     Expect fail.
@@ -1317,3 +1317,269 @@ class CreateUserView(generics.CreateAPIView):
     `path('api/user/', include('user.urls')),`.
 13. Run test - `docker-compose run --rm app sh -c "python3 manage.py test && flake8`.
     Expect OK.
+
+---
+
+### Add Tests for Creating A New Token
+
+> Note: The next thing you are going to add to your user's API is the *create*
+        *token* endpoint. This is going to be an endpoint that you can make
+        a HTTP POST request and you can generate a temporary auth token that you
+        can then use to authenticate future requests with the API. With you API
+        you are going to be using token authentication. The way that you log in
+        is you use this API to generate a token and then you provide that token
+        as the authentication header for future requests which you want to
+        authenticate. The benefit of this is you do not need to send the user's
+        username and password with every single request that you make. You just
+        need to send it once to create the token and then you can use that token
+        for future requests. If you ever want to revoke the token you can do
+        that in the database. You are going to start by creating 4 unit tests:
+        **test that the token is created okay**, **check what happens if you**
+        **provide invalid credentials**, **check if you are trying to authenticate**
+        **against a non-existent user** and **check if you provide a request that**
+        **does not include a password**. You are going to add them to the
+        *test_user_api.py* file in your **user**'s tests directory.
+
+1. Head over to *test_user_api.py* in **user** app.
+2. Add new *TOKEN_URL* under the already existing *CREATE_USER_URL*:
+   `TOKEN_URL = reverse('user:token')`.
+
+> Note: This is going to be the URL that you are going to use to make the HTTP
+        POST request to generate you token.
+
+3. **Because you do not need to add authentication to this API because the**
+   **purpose of this API is to start the authentication head over to the bottom**
+   **of the PublicUserApiTests class** and create new *test_create_token_for_user*
+   test:
+
+```python
+def test_create_token_for_user(self):
+    """Test that a token is created for user."""
+    payload = {
+        'email': 'test@gmail.com',
+        'password': 'admin123',
+        'name': 'Test'
+    }
+    create_user(**payload)
+    res = self.client.post(TOKEN_URL, payload)
+
+    self.assertIn('token', res.data)
+    self.assertEqual(res.status_code, status.HTTP_200_OK)
+```
+
+> Note: First you create a payload with data to create a user to test API.
+        Next you create user that matches this authentication so you can test
+        against that user. Then you make you request to the TOKEN_URL and store
+        it in a variable called *res*. At this point because you made a request
+        for a login with the email and password from payload and because this
+        user exists as you created it in *create_user(**payload)*, you should
+        get a HTTP 200 response and it should contain a token in the data
+        response. So next you do the assertions: check if the token is a part
+        of *res*' data and check if the status code is HTTP 200 OK. In this case
+        you only check if the token exist but not if it is correct. This is
+        because you are using the built-in Django authentication system. So that
+        will already have its own unit test as part of the Django REST Framework
+        unit test suite.
+
+4. Next add test for creating token in case of invalid credentials:
+
+```python
+def test_create_token_invalid_credentials(self):
+    """Test that token is not created if invalid credentials are given."""
+    create_user(email='test@gmail.com', password='admin123', name='Test')
+    payload = {
+        'email': 'test@gmail.com',
+        'password': 'wrong',
+        'name': 'Test'
+    }
+    res = self.client.post(TOKEN_URL, payload)
+
+    self.assertNotIn('token', res.data)
+    self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+```
+
+> Note: First you create a user with sample email, password and name. Then create
+        payload with an email and email same as the user's that you created.
+        The password should be different (case of invalid credentials). Next you
+        make a request that you expect to be HTTP 400. Then you check if the
+        token is not in *res*' data (it should not as the password was invalid).
+        Finally you check if the response's status code is HTTP 400 BAD REQUEST.
+
+5. The next test is to test if the token will be created if the user does not
+   exist:
+
+```python
+def test_create_token_no_user(self):
+    """Test that token is not created if user does not exist."""
+    payload = {
+        'email': 'test@gmail.com',
+        'password': 'admin123',
+        'name': 'Test'
+    }
+    res = self.client.post(TOKEN_URL, payload)
+    self.assertNotIn('token', res.data)
+    self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+```
+
+> Note: So the first thing you create is a user's payload. Then you create
+        the TOKEN_URL's response on payload's data. In this case you just tried
+        to log in as the user that does not exist. So next thing you do is
+        assertion to check if the token does not exist within *res*' data and
+        the status code of the site is HTTP 400 BAD REQUEST.
+
+6. Finally create a test to check what happens when the user's fields are
+   missing:
+
+```python
+def test_create_token_missing_field(self):
+    """Test that email and password are required."""
+    res = self.client.post(TOKEN_URL, {
+        'email': 'one',
+        'password': '',
+        'name': ''
+    })
+    self.assertNotIn('token', res.data)
+    self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+```
+
+> Note: So there is no need to create payload so just create response with the
+        data for login but with the missing password and name. Next you assert
+        that there is no token in response's data and the status code is HTTP
+        400 BAD REQUEST.
+
+7. Run test - `docker-compose run --rm app sh -c "python3 manage.py test && flake8`.
+   Expect to fail.
+
+---
+
+### Add Create Token API
+
+> Note: So next you can go ahead and implement your create token API to make
+        your unit tests pass.
+
+1. Head over to your *serializers.py* within **user** app.
+
+> Note: Next you are going to create *AuthTokenSerializer*. So you are going to
+        create a new serializer just based off the Django standard serializers
+        module and you are going to use this for authenticating your requests.
+
+2. Create the *AuthTokenSerializer*:
+   `class AuthTokenSerializer(serializers.Serializer):`.
+3. Add a couple more imports to the top:
+* `from django.contrib.auth import authenticate`: Django helper command for
+  working with the Django authentication system. So you simply pass in the
+  username and password and you can authenticate a request.
+* `from django.utils.translation import ugettext_lazy as _`: **whenever you are**
+  **outputting any messages in the Python code that are going to be output to the**
+  **screen it is a good idea to pass them through this translation system just so**
+  **if you ever do add any extra languages to your projects you can easily add the**
+  **language file and it will automatically convert all of the text to the correct**
+  **language**.
+4. Add a class variables in *AuthTokenSerializer* serializer class:
+* `email = serializers.CharField()`: standard email input.
+* Password field:
+
+```python
+password = serializers.CharField(
+      style={'input_type': 'password'},
+      trim_whitespace=False,
+      )
+```
+
+> Note: `trim_whitespace=False` because passwords can have spaces.
+
+5. Next add your *validate* command. This function is called when you validate
+   your serializer. So the validation is basically checking that the inputs are
+   all correct. So that is an *email* field and *password* field. And as part of
+   the validation function you are also going to validate that the authentication
+   credentials are correct. This class is based off the default token serializer
+   that is built into the Django REST Framework. You are just modifying it slightly
+   to accept your email address instead of username:
+
+```python
+def validate(self, attrs):
+    """Validate and authenticate the user."""
+    email = attrs.get('email')
+    password = attrs.get('password')
+
+    user = authenticate(
+        request=self.context.get('request'),
+        username=email,
+        password=password
+    )
+    if not user:
+        msg = _('Unable to authenticate with provided credentials.')
+        raise serializers.ValidationError(msg, code='authentication')
+    attrs['user'] = user
+    return attrs
+```
+
+> Note: `attrs` stands for attributes that you are going to be validating. These
+        attributes are basically just every field that makes up your serializer.
+        So any field that makes up a serializer, it will get passed into the
+        *validate* function here as this dictionary and then you can retrieve
+        the fields via this attributes and you can then valudate whatever you
+        want to pass this validation or you want to fail the validation. Firstly
+        you retrieve the *email* address and the *password* from these attributes.
+        Next you use the *authenticate* method to authenticate your request.
+        With *authenticate* the first argument is the *request* that you want to
+        authenticate. So `request=self.context.get('request')` is how you
+        basically access the context of the request that was made. You are going
+        to pass this into your view set and what the Django REST Framework view
+        set does is when a request is made it passes the context into the
+        serializer in this `context` class variable here and from that you can
+        get ahold of the request that was made. So that is what you are going to
+        do here. You are going to pass the request in and then you are going to
+        pass the username as email (because we are authenticating via email) and
+        also add your password as password. Then you create an *if* statement
+        in case that this authentication did not work to raise an *ValidationError*.
+        Notice the *_* before message. Finally you set your user in the attributes
+        which you return. Remember that whenever you are overriding the *validate*
+        function, you must return the value at the end once the validation is
+        successful.
+
+6. Go to *views.py* within your **user** app and do some imports:
+* `from rest_framework.authtoken.views import ObtainAuthToken`: if you are
+  authenticated using a username and password as standard, it is very easy to
+  just switch this on. You can just pass in the *ObtainAuthToken* view directly
+  into your URLs. Because you are customizing it slightly you need to just
+  basically import it into your views and then extend it with a class and then
+  make a few changes to the class variables.
+* `from rest_framework.settings import api_settings`.
+* `from user.serializers import AuthTokenSerializer`.
+7. Create your view:
+
+```python
+class CreateTokenView(ObtainAuthToken):
+    """Create a new auth token for user."""
+
+    serializer_class = AuthTokenSerializer
+    renderer_classes = api_settings.DEFAULT_RENDERER_CLASSES
+```
+
+> Note: `renderer_classes` sets the renderer so you can view this endpoint in the
+        browser with the browsable API. It menas that you can login using e.g.
+        Chrome or whatever and you can type in the username and password and can
+        click post and then it should return the token. If you do not do this
+        then you have to use a tool such as C URL or some other tool to make the
+        HTTP POST request. `api_settings.DEFAULT_RENDERER_CLASSES` to use the
+        default renderer class. Using this expresion, if you ever change the
+        renderer class and you want to use a different class to render your
+        browsable API then you can do that in the settings and it will update in
+        your view automatically.
+
+8. Head over to *urls.py* within this app and add new path:
+   `path('token/', views.CreateTokenView.as_view(), name='token'),`.
+9. Run test - `docker-compose run --rm app sh -c "python3 manage.py test && flake8`.
+   Expect OK.
+10. Run `docker-compose up` to start the server and head over to your browser
+    to check if everything is working. You can head over to the
+    *http://127.0.0.1:8000/api/user/create* to create a user and
+    *http://127.0.0.1:8000/api/user/token* to log in and check if token is created.
+
+So when you create your client app that consumes the API what you would do is
+you would take this token that is created and you would store it in a cookie or
+in the some kind of persistent storage that you could then use to authenticate
+with future requests.
+
+> Recommended: Push to GitHub.
