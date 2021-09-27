@@ -1583,3 +1583,85 @@ in the some kind of persistent storage that you could then use to authenticate
 with future requests.
 
 > Recommended: Push to GitHub.
+
+---
+
+### Add Tests For Manage User Endpoint
+
+> Note: Next you are going to add your manage user endpoint. The manage user
+        endpoint will allow the authenticated user to update their own profile.
+        This includes changing their name, password and viewing their user
+        object.
+
+1. Head over to the **/user/tests/test_user_api.py/PublicUserApiTests** because
+   you are going to test as if you are an unauthenticated user and since you do
+   not add any authentication in this client, you can go ahead and use this
+   class to run the following test.
+2. Before you add a test to the *PublicUserApiTests*, go to the top of the file
+   and add new *ME_URL* which will represent the manage user endpoint:
+   `ME_URL = reverse('user:me')`.
+3. Now add test to check if authentication is required for the endpoint. This is
+   important to check because it affects the security of it and you do not want
+   APIs being made publicly by accident. Great way to prevent against that is
+   to add unit tests to make sure that after any changes that you make, those
+   APIs will always be private:
+
+```python
+def test_retrieve_user_unauthorized(self):
+    """Test that authentication is required for users."""
+    res = self.client.get(ME_URL)
+
+    self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+```
+
+> Note: All this does is it makes sure that if you call the URL without any  
+        authentication it returns HTTP 401 UNAUTHORIZED.
+
+Next you are going to ass some authenticated requests to your endpoint. So
+the tests that you are going to add is `test_retrieve_profile_success`,
+`test_post_me_not_allowed` (so you are not going to support POST on the *ME*
+endpoint, you are just going to support *PATCH* and *PUT* to update it) and
+`test_update_user_profile`.
+
+4. Create a new test class and call it *PrivateUserApiTests*. **The _private_**
+   **means that authentication is required before you can use these endpoints**:
+   `class PrivateUserApiTests(TestCase):`.
+5. Create a *setUp* class method that is going to do the authentication for each
+   test that you do. So you do not need to set the authentication every single
+   test. You are just doing the *setUp* and then that happens automatically
+   before each test:
+
+```python
+def setUp(self):
+    """Set up the client authenticated as user."""
+    self.user = create_user(
+        email='test@gmail.com',
+        password='admin123',
+        name='Test'
+    )
+    self.client = APIClient()
+    self.client.force_authenticate(user=self.user)
+```
+
+> Note: Firstly you create a user with demo credentials. Then using *APIClient*
+        you create a reusable client. Then you do the force authentication
+        to authenticate any requests that the client makes with your sample user.
+        *force_authenticate* is a helper function that just makes it really easy
+        to simulate or make authenticated requests. So whichever request you make
+        with this *client*, now will be authenticated with your sample user.
+
+6. Add test to check that you can retrieve the profile of the logged in user:
+
+```python
+def test_retrieve_profile_success(self):
+    """Test retrieving progile for logged id user."""
+    res = self.client.get(ME_URL)
+
+    self.assertEqual(res.status_code, status.HTTP_200_OK)
+    self.assertEqual(res.data, {
+        'name': self.user.name,
+        'email': self.user.email
+    })
+```
+
+> Note: 
