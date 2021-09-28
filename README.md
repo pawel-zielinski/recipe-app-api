@@ -1654,7 +1654,7 @@ def setUp(self):
 
 ```python
 def test_retrieve_profile_success(self):
-    """Test retrieving progile for logged id user."""
+    """Test retrieving profile for logged id user."""
     res = self.client.get(ME_URL)
 
     self.assertEqual(res.status_code, status.HTTP_200_OK)
@@ -1664,4 +1664,143 @@ def test_retrieve_profile_success(self):
     })
 ```
 
-> Note: 
+> Note: You only do request because you have already authenticated in your *setUp*
+        so you do not need to do that authentication. Then you test if the  
+        status code of the response is OK and if the name and email from the
+        response matches the users data. You want to exclude the password because
+        sending a it, even if it is the hash of the password, is never recommended.
+
+7. Test that you cannot do a HTTP POST request on the profile.
+
+```python
+def test_post_me_not_allowed(self):
+    """Test that POST is not allowed on the me url."""
+    res = self.client.post(ME_URL, {})
+
+    self.assertEqual(res.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+```
+
+> Note: Firstly you post the empty object to test it. Then you add your
+        assertion to check if you get HTTP 405 METHOD NOT ALLOWED response.
+        This is the standard response when you try and do a HTTP method that is
+        not allowed on the API.
+
+8. Next add your user profile update test.
+
+```python
+def test_update_user_profile(self):
+    """Test updating the user profile for authenticated user."""
+    payload = {'name': 'Test', 'password': 'not_admin123'}
+
+    res = self.client.patch(ME_URL, payload)
+
+    self.user.refresh_from_db()
+    self.assertEqual(self.user.name, payload['name'])
+    self.assertTrue(self.user.check_password(payload['password']))
+    self.assertEqual(res.status_code, status.HTTP_200_OK)
+```
+
+> Note: Firstly you create a payload with a data that differs from the *setUp*'s
+        user by password. Create a PATCH response from */me/* URL. Then you
+        use the *refresh_from_db* helper function on your user to update the user
+        with the latest values from the database. Then you check if the name and
+        password of the user matches with the payload's. Finally you check if
+        the status code is HTTP 200 OK.
+
+9. Run test - `docker-compose run --rm app sh -c "python3 manage.py test && flake8`.
+   Expect to fail.
+
+---
+
+### Add Manage User Endpoint
+
+> Note: Now you can actually create your manage user endpoint. You are going to
+        use your existing *UserSerializer* but you are going to add an additional
+        function to the serializer for updating your user object. You are also
+        going to add a custom view using the retrieve update API view using the
+        Django REST Framework generic API view options.
+
+1. Head over to the *app/user/views.py* file and do some imports:
+* `from rest_framework import authentication, permissions`: these are Django
+  REST Framework classes that you are going to use for your authentication and
+  permissions of your user endpoint.
+2. Create you *ManageUserView* class and base it from *RetrieveUpdateAPIView*:
+   `class ManageUserView(generics.RetrieveUpdateAPIView):`.
+3. First thing, just like other views that you create, create a **serializer class**
+   **attribute**: `serializer_class = UserSerializer`.
+4. Add two additional class variables for authentication and permission:
+   `authentication_classes = (authentication.TokenAuthentication,)` and
+   `permission_classes = (permissions.IsAuthenticated,)`.
+
+> Note: Authentication is the mechanism by which the authentication happens so
+        this could be cookie authentication or (what you are going to use) token
+        authentication. The permissions are the level of access that the user
+        has. The only permission you are going to add is that the user must be
+        authenticated to use the API. They do not have to have any special
+        permissions, they just have to be logged in.
+
+5. Add a *get_object* method to your API view:
+
+```python
+def get_object(self):
+    """Retrieve and return authentication user."""
+    return self.request.user
+```
+
+> Note: So typically what would happen with an APIView is you would link it to
+        a model and it could retrieve the item and you would retrieve data based
+        models. In this case you are going to just get the model for the logged
+        in user. You are going to override the *get_object* and you are going to
+        return the user that is authenticated. When the *get_object* is called,
+        the request will have the user attached to it because of the
+        authentication classes, so because you have the authentication class that
+        takes care of getting the authenticated user and assigning it to request.
+        This is a great feature of Django REST Framework. Django has a similar
+        thing out of the box as well.
+
+6. Move on to your *app/user/serializers.py/UserSerializer* and add *update*
+   method:
+
+```python
+def update(self, instance, validated_data):
+    """Update a user, setting the password correctly and return it."""
+    password = validated_data.pop('password', None)
+    user = super().update(instance, validated_data)
+
+    if password:
+        user.set_password(password)
+        user.save()
+
+    return user
+```
+
+> Note: The purpose of this is you want to make sure the password is set using
+        the *set_password* function instead of just setting it to whichever
+        value is provided. The *instance* is going to be the model instance that
+        is linked to your model serializer. That is going to be your user object.
+        The *validated_data* is going to be fields passed in *Meta* (these
+        fields that have been through the validation and ready to update). So
+        firstly you remove the password from the *validated_data* and set it to
+        the *password* variable by using *pop* function. The default value is
+        *None* because you are going to allow the users to optionally provide
+        a password. Next you run update request on the rest of your
+        *validated_data*. So whatever is left, that is everything except the
+        password, you can update. And what you do here with *super* is you call
+        the *ModelSerializer* update function (so the default one), it will call
+        the default function in your function so you can make use of all the
+        functionality that is included in the default one whilst extending it
+        slightly to customize it for your needs. Next you set the password if
+        user has provided a password. Finally you return user.
+
+7. Head over to the *app/user/urls.py* file and add new path:
+   `path('me/', views.ManageUserView.as_view(), name='me'),`.
+8. Run test - `docker-compose run --rm app sh -c "python3 manage.py test && flake8`.
+   Expect OK.
+9. Test API in the browser by heading over to the *127.0.0.1:8000/api/user/token*,
+   log in and copy the token. Paste it in *Mod Header* with the name
+   *Authentication* and value *Token <COPIED TOKEN>*. Then visit
+   *127.0.0.1:8000/api/user/me*. You should see that the user is authenticated.
+   Try to change the details of the user using *PATCH*. Try to change the password
+   and to log in again.
+
+> Recommended: Push to GitHub.
