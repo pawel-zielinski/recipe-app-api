@@ -1804,3 +1804,482 @@ def update(self, instance, validated_data):
    and to log in again.
 
 > Recommended: Push to GitHub.
+
+## Create Tags Endpoint
+
+> Note: In this section you are going to add your *tags* API. The *tags* API is
+        going to allow you to manage tags which you can assign to recipes in
+        order to help with sorting and filtering of your recipes in the system.
+        You are going to create your tags endpoint in a new app called *recipe*.
+        The *recipe* app is where you are going to store all the recipe related
+        endpoints such as the one for creating and uploading recipes and the ones
+        for creating and updating tags and ingredients. You are going to start
+        with tags.
+
+### Create Recipe App
+
+1. Head over to terminal and create a *recipe* app within the *recipe-app-api*
+   project: `docker-compose run --rm app sh -c "python manage.py startapp recipe"`.
+2. In *recipe* app remove: *admin.py* (because you are going to keep all the
+   admin code in the *core* app), *models.py* (because that is also in the
+   *core* app), *migrations* and *test.py* (but create a new folder for hosting
+   your test - that folder is going to be *tests* with the *\_\_init\_\_.py*
+   file in it).
+3. Go to the *app/settings.py* and add *recipe* to the *INSTALLED_APPS*.
+
+---
+
+### Create Tags Model
+
+> Note: Next you are going to create a new database model for handling your tag
+        objects. Your tag model is going to be very basic. It is just going to
+        accept the name of the tag and the user who owns the tag. You are going
+        to start by adding a unit test for getting the tag object as a string
+        and then you are going to implement your model. Then you are going to
+        run your migrations to create the migration which would create the model
+        in the database.
+
+1. Head over to the *core* app and the *tests* folder and open up the
+   *test_models.py* file.
+2. Add a new helper function at the top to create users. That makes it easy for
+   you to create user in your test:
+
+```python
+def sample_user(email='test@gmail.com', password='admin123'):
+    """Create a sample user."""
+    return get_user_model().objects.create_user(email, password)
+```
+
+> Note: Firstly you set up a default options in the parameters because in most
+        cases this data is decent for the sample user and usually it is the same
+        user with the same data.Then you return the user created using the
+        *create_user* custom method.
+
+3. Import *models* from *core* app and scroll down to the *test_create_new_superuser*
+   method and under it create a test that creates a tag and verifies that it
+   converts to the correct string representation:
+
+```python
+def test_tag_str(self):
+    """Test the tag string representation."""
+    tag = models.Tag.objects.create(
+        user=sample_user(),
+        name='Vegan'
+    )
+
+    self.assertEqual(str(tag), tag.name)
+```
+
+> Note: Firstly you create a *tag* variable that contains the object of Tag model
+        with the data of user (created using the helper function that you have
+        just created) and the tag's name. Then you assert to check if after
+        string conversion of *tag* the value is the tag's name. With Django models
+        you can specify what field you want to use when you convert the model to
+        a string representation and you are going to set it to the name.
+
+4. Run test - `docker-compose run --rm app sh -c "python3 manage.py test && flake8`.
+   Expect to fail.
+5. Go over to you *models.py* and below, under the *User* model, create a new
+   *Tag* model class which is going to inherit from models' Model:
+
+```python
+class Tag(models.Model):
+    """Tag to be used for a recipe."""
+
+    name = models.CharField(max_length=255)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+    )
+```
+
+> Note: Firstly you create a *name* character field with the max length of 255
+        characters. Then you assign the *user* ForeignKey to your user object.
+        But instead of referencing to the user object directly which you could
+        do, you are going to use the **best practice method of retrieving the**
+        **AUTH_USER_MODEL setting from your Django settings.** To do that you
+        have to import *settings* from *django.conf*. This is recommended way to
+        retrieve different settings from the Django settings file. Then you set
+        up that when the user is deleted, tags are deleted as well.
+
+6. Add a string representation method of tags:
+
+```python
+def __str__(self):
+    """Represent tag as string value."""
+    return self.name
+```
+
+7. Head over to the *app/core/admin.py* to register this model:
+
+```python
+admin.site.register(models.Tag)
+```
+
+8. Run migrations using terminal: `docker-compose run --rm app sh -c "python manage.py makemigrations"`.
+9. Run test - `docker-compose run --rm app sh -c "python3 manage.py test && flake8`.
+   Expect OK with one error in views about import not used.
+
+---
+
+### Add Tests For Listing Tags
+
+> Note: Next you are going to create your list tags API. Firstly you will start
+        by creating unit tests to test that the API requires authentication to
+        access it then you are going to test that you can list tags in your API
+        and finally you are going to test that the tags that are listed are
+        specifically for the user that is authenticated.
+
+1. Go ahead and create a test module within your *recipe/tests* folder called
+   *test_tags_api.py*.
+2. Do some imports:
+* `from django.contrib.auth import get_user_model` to get user model.
+* `from django.urls import reverse` to generate URL.
+* `from django.test import TestCase`.
+* `from rest_framework import status`.
+* `from rest_framework.test import APIClient`.
+* `from core.models import Tag`.
+* `from recipe.serializers import TagSerializer`.
+3. Create tags URL: `TAGS_URL = reverse('recipe:tag-list')`. The URL is going to
+   be using a ViewSet so that will automatically append the action name to the
+   end of the URL for you using the router. `recipe` identifies the *app_name*.
+   `tag` finds the route based on the model name assigned to the `queryset` class
+   variable of the view (converted to lowercase). `-list` refers to the actions
+   which are provided by default in the *ModelViewset* class.
+4. Create the public API tests: `class PublicTagsApiTests(TestCase):`.
+5. Add *setUp* method within that class to configure client:
+
+```python
+def setUp(self):
+    """Set up the client."""
+    self.client = APIClient()
+```
+
+6. Add *test_login_required* method to *PublicTagsApiTests* class to check if
+   the login is required for retrieving tags:
+
+```python
+def test_login_required(self):
+    """Test that login is required for retrieving tags."""
+    res = self.client.get(TAGS_URL)
+
+    self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+```
+
+> Note: This is going to make an unauthenticated request to your tags API URL.
+        Then it is going to check if the request's status code is HTTP 401
+        UNAUTHORIZED.
+
+7. Next add the authenticated tests by creating a class called *PrivateUserApiTests*:
+   `class PrivateTagsApiTests(TestCase):`.
+8. Create a *setUp* method to set up the client authenticated as the user:
+
+```python
+def setUp(self):
+    """Set up the client."""
+    self.user = get_user_model().objects.create_user(
+        'test@gmail.com',
+        'admin123'
+    )
+    self.client = APIClient()
+    self.client.force_authenticate(self.user)
+```
+
+9. Create test to test retrieving the tags. You are going to set it up by
+   creating a couple of sample tags and then you are going to make the request
+   to the API. Then you are going to check that the tags returned equal what you
+   expect them to equal:
+
+```python
+def test_retrieve_tags(self):
+    """Test retrieving tags."""
+    Tag.objects.create(user=self.user, name='Vegan')
+    Tag.objects.create(user=self.user, name='Dessert')
+
+    res = self.client.get(TAGS_URL)
+    tags = Tag.objects.all().order_by('-name')
+    serializer = TagSerializer(tags, many=True)
+
+    self.assertEqual(res.status_code, status.HTTP_200_OK)
+    self.assertEqual(res.data, serializer.data)
+```
+
+> Note: Firstly you create two Tag objects - Vegan and Dessert. Then you create
+        a response from the TAGS_URL. Next you create *tags* variable with all
+        Tag's objects ordered by the reversed alphabetical order. Then you create
+        a *serializer* variable with serialized *tags* variable data (`many=True`
+        because *tags* contains more than one object and **serializers only**
+        **serialize one object at the time**). Then you check if the request's
+        status code is equal to the HTTP 200 OK and the request's data is equal
+        to the *serializer*'s data.
+
+10. Test that the tags that are retrieved are limited just to the user that is
+    logged in. You only want to see tags that are assigned to the authenticated
+    user:
+
+```python
+def test_tags_limited_to_user(self):
+    """Test that returned tags are for the authenticated user."""
+    user2 = get_user_model().objects.create_user(
+        'other@gmail.com',
+        'testpass'
+    )
+    Tag.objects.create(user=user2, name='Fruity')
+    tag = Tag.objects.create(user=self.user, name='Comfort Food')
+
+    res = self.client.get(TAGS_URL)
+
+    self.assertEqual(res.status_code, status.HTTP_200_OK)
+    self.assertEqual(len(res.data), 1)
+    self.assertEqual(res.data[0]['name'], tag.name)
+```
+
+> Note: Firstly you create *user2* in addition to the user that is created at the
+        *setUp* just so you can assign a tag to that user. Then you can compare
+        that that tag was not included in the response because it was not the
+        authenticated user. Then you create a new tag object assigned to the
+        *user2*. Then you create a new tag assigned to the authenticated user
+        and save it in a *tag* variable for the assertion purposes. Then you
+        create a response from the tags' URL. Next you check if the response's
+        status code is HTTP 200 OK. It should because you authenticate as the
+        authenticated user. Then Then you check if the length of the response's
+        data is 1. It should because you want only authenticated users' tags.
+        Finally you check if the response's data contains the tag that is the same
+        as the tag that authenticated user has.
+
+11. Run test - `docker-compose run --rm app sh -c "python3 manage.py test && flake8`.
+   Expect to fail.
+
+---
+
+### Add Feature To List Tags
+
+> Note: Next you are going to implement the feature to list you tags from your
+        list tags API.
+
+1. Create a new *serializers.py* file within *recipe* app.
+2. Do some imports:
+* `from rest_framework import serializers`.
+* `from core.models import Tag`.
+3. Create a simple *TagSerializer*. You are going to link this to your *Tag*
+   model and pull in the ID and the name values:
+
+```python
+class TagSerializer(serializers.ModelSerializer):
+    """Serializer for tag objects."""
+
+    class Meta:
+        """Meta class of TagSerializer."""
+
+        model = Tag
+        fields = ('id', 'name')
+        read_only_fields = ('id',)
+```
+
+4. Move to *app/recipe/views.py* file.
+
+> Note: The view that you are going to create is a ViewSet and you are going to
+        base it off the generic ViewSet and you are specifically going to use
+        the *ListModelMixin*. This is a Django REST Framework feature where you
+        can pull in different parts of a ViewSet that you want to use for your
+        application. You only wanto to take the *list model* function. You do not
+        want to add the *create*, *update*, *delete* function. You are just going
+        to add the *list model* function and you can do that very easily by using
+        a combination of the generic ViewSet and the *ListModelMixin*.
+
+5. Delete all the content in this file and do imports:
+* `from rest_framework import viewsets, mixins`.
+* `from rest_framework.authentication import TokenAuthentication`: because you
+  want to authenticate the request.
+* `from rest_framework.permissions import IsAuthenticated`.
+* `from core.models import Tag`.
+* `from recipe import serializers`.
+6. Create a *TagViewSet* class:
+
+```python
+class TagViewSet(viewsets.GenericViewSet, mixins.ListModelMixin):
+    """Manage tags in the database."""
+
+    authentication_classes = (TokenAuthentication,)
+    permission_classes = (IsAuthenticated,)
+    queryset = Tag.objects.all()
+    serializer_class = serializers.TagSerializer
+```
+
+> Note: For more about the different mixins that are available:
+        *https://www.django-rest-framework.org/api-guide/viewsets/#genericviewset*,
+        *https://www.django-rest-framework.org/api-guide/viewsets/#example_3*.
+        Firstly you add variables to require that token authentication is used
+        and the user must be authenticated to use the API. Next you create
+        *queryset*. When you are defining a *ListModelMixin* in the generic
+        ViewSet, you need to provide the *queryset* that you want to return.
+        Then you add a *serializer_class* to wire this up to the *TagSerializer*.
+
+7. Move to the *app/recipe/urls.py* file and do some imports:
+* `from django.urls import path, include`.
+* `from rest_framework.routers import DefaultRouter`.
+* `from recipe import views`.
+
+> Note: The *DefaultRouter* is a feature of the Django REST Framework that will
+        automatically generate the URLs for your ViewSet. When you have a ViewSet
+        you may have multiple URLs associated with that one ViewSet. So one URL
+        might be the */api/recipe/tags* and another URL might be */tag/<TAG ID*
+        *TO RETRIEVE THE SPECIFIC ITEM>* and in another you might add some
+        additional ones like you might add some custom actions to it like you
+        did with the users where you did the change password and what the
+        *DefaultRouter* does is it automatically registers the approprate URLs
+        for all of the actions in your ViewSet.
+
+8. Then create a router variable with the *DefaultRouter* object:
+
+```python
+router = DefaultRouter()
+```
+
+9. Next, because you are working on ViewSet, you can register this ViewSet to
+   this router:
+
+```python
+router.register('tags', views.TagViewSet)
+```
+
+10. Then you add an *app_name*:
+
+```python
+app_name = 'recipe'
+```
+
+11. And new path to *urlpatterns*:
+
+```python
+urlpatterns = [
+    path('', include(router.urls))
+]
+```
+
+12. Head over to the *app/app/urls.py* file and add new path to *urlpatterns*:
+
+```python
+path('api/recipe/', include('recipe.urls')),
+```
+
+13. Run test - `docker-compose run --rm app sh -c "python3 manage.py test && flake8`.
+    Expect to fail.
+14. Head over to the *app/recipe/views.py/TagViewSet* and add a function which
+    will override the *get_queryset* function:
+
+```python
+def get_queryset(self):
+    """Return objects for the cirrent authenticated user only."""
+    return self.queryset.filter(user=self.request.user).order_by('-name')
+```
+
+> Note: When the list function is invoken so when your ViewSet is invoken from
+        a URL it will call *get_queryset* to retrieve these objects and this is
+        where you can apply any custom filtering like limiting it to the
+        authenticated user. **Whatever you return here, will be displayed in the**
+        **API. This is just how the Django REST Framework functions** and this is
+        all explained and outlined in their documentation. If you do return
+        *self.queryset*  you could reference *Tag.objects.all()* directly but this
+        would not recommended because the if you changed the object that you are
+        retrieving then it would not work so you want to be able to change it in
+        one place and this should be the objects that are being rendered by the
+        ViewSet. The request objects should be passed in to the self as a class
+        variable and then the user should be assigned to that because authentication
+        is required. If they manage to get this far in calling the API then they
+        would have already been authenticated and they would already have these
+        authenticated permission prove otherwise they would have just received an
+        unauthenticated request error.
+
+15. Run test - `docker-compose run --rm app sh -c "python3 manage.py test && flake8`.
+    Expect OK.
+
+---
+
+### Add Create Tags Feature
+
+> Note: Next you are going to add the create tags feature. You are going to start
+        by adding some basic tests to your test suite to check that you can
+        create tags and also to check that when you create tags validation
+        is performed correctly on the create request.
+
+1. Head over to the *app/recipe/tests/test_tags_api.py/PrivateTagsApiTests*
+   and create a test to check if the tag is created in a proper way:
+
+```python
+def test_create_tag_successful(self):
+    """Test creating a new tag."""
+    payload = {'name': 'Test tag'}
+    self.client.post(TAGS_URL, payload)
+
+    exists = Tag.objects.filter(
+        user=self.user,
+        name=payload['name']
+    ).exists()
+
+    self.assertTrue(exists)
+```
+
+> Note: Firstly you create the *payload* with the tag's data. Then you post
+        this data to the tags' URL as client authenticated as user. Next you
+        create the *exists* variable to keep boolean value about the existence
+        of the tag created by this user and with the name from the payload.
+        Finally you assert that *exists* is *True*.
+
+2. Add the test to check what happens when the tag has invalid name:
+
+```python
+def test_create_tag_invalid(self):
+    """Test creating a new tag with invalid payload."""
+    payload = {'name': ''}
+    res = self.client.post(TAGS_URL, payload)
+    self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+```
+
+> Note: Firstly you create a payload with the tag's empty name field. Then
+        you do the POST method on the tags' URL with the payload's data
+        and the client authorized as user. Then you check if the status code
+        of the response is HTTP 400 BAD REQUEST.
+
+3. Run test - `docker-compose run --rm app sh -c "python3 manage.py test && flake8`.
+   Expect to fail.
+4. Head over to the *views.py* and add *CreateModelMixin* to the parameters of
+   *TagViewSet* as an another class that this is going to be based on:
+
+```python
+class TagViewSet(viewsets.GenericViewSet,
+                 mixins.ListModelMixin,
+                 mixins.CreateModelMixin):
+```
+
+> Note: You can add these mixins to customize the functionality that is available
+        for your ViewSet. You do not have to do the standard model ViewSet and
+        accept everything because there might be some cases where you do not
+        want to allow users to do everything and you do not need that feature
+        so there is no point implementing it. So you can customize it by adding
+        the specific mixins for what you want to do and in this case you are
+        going to add the *mixin.CreateModelMixin*. So this will add the **create**
+        option.
+
+5. Now you have to override the *perform_create* so that you can assign the tag
+   to the correct user:
+
+```python
+def perform_create(self, serializer):
+    """Create a new tag."""
+    serializer.save(user=self.request.user)
+```
+
+> Note: Very similar to the *get_queryset*, the *perform_create* function
+        is a function that allows you to hook into the create process when
+        creating and object and what happens is when you do a create object in
+        your ViewSet this function will be invoked and the validated serializer
+        will be passed in as a serializer argument and then you can perform any
+        modifications here that you would like to create process. All you are
+        going to do is you are just going to do *serializer.save* and set the
+        user to the authenticated user.
+
+6. Run test - `docker-compose run --rm app sh -c "python3 manage.py test && flake8`.
+   Expect OK.
+
+> Recommended: Push to GitHub.
