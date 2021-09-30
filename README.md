@@ -2283,3 +2283,456 @@ def perform_create(self, serializer):
    Expect OK.
 
 > Recommended: Push to GitHub.
+
+## Create Ingredients Endpoint
+
+> Note: In this section you are going to create your ingredients endpoint. The
+        ingredients endpoint is going to be very similar to the tags endpoint in
+        that it allows you to create and list ingredients which you can later
+        assign to recipes for the purposes of filtering.
+
+### Add Ingredient Model
+
+> Note: You are going to start by adding your ingredient model.
+
+1. Had over to *app/core/tests/test_models.py/ModelTests* and add new test to
+   to check the ingredient's string representation:
+
+```python
+def test_ingredient_str(self):
+    """Test the ingredient string representation."""
+    ingredient = models.Ingredient.objects.create(
+        user=sample_user(),
+        name='cucumber'
+    )
+
+    self.assertEqual(str(ingredient), ingredient.name)
+```
+
+> Note: Firstly you create an ingredient registered by a user and saved as
+        *ingredient* variable. Then you check if the string representation of
+        this object matches with it's name.
+
+2. Run test - `docker-compose run --rm app sh -c "python3 manage.py test && flake8`.
+   Expect to fail.
+3. Open up the *app/core/models.py* and add new *Ingredient* model at the bottom:
+
+```python
+class Ingredient(models.Model):
+    """Ingredient to be user in a recipe."""
+
+    name = models.CharField(max_length=255)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE
+    )
+
+    def __str__(self):
+        """Represent ingredient as string value."""
+        return self.name
+```
+
+4. Open up terminal and run migrations to create your migration file:
+   `docker-compose run --rm app sh -c "python manage.py makemigrations core"`
+5. Head over to the *app/core/admin.py* to register new model:
+
+```python
+admin.site.register(models.Ingredient)
+```
+
+6. Run test - `docker-compose run --rm app sh -c "python3 manage.py test && flake8`.
+   Expect OK.
+
+---
+
+### Add Tests For Listing Ingredients
+
+> Note: Next you are going to add some tests for listing ingredients. You are
+        going to create the same type of API that you created for your tags
+        except you are going to list ingredients. You are going to start
+        by adding the unit tests.
+
+1. Head over to the *app/recipe/tests* folder and create a new test module called
+   *test_ingredients_api.py*.
+2. Go to that test module and add some imports:
+* `from django.contrib.auth import get_user_model`.
+* `from django.urls import reverse`.
+* `from django.test import TestCase`.
+* `from rest_framework import status`.
+* `from rest_framework.test import APIClient`.
+* `from core.models import Ingredient`.
+* `from recipe.serializers import IngredientSerializer`.
+3. Add ingredients URL and create your public ingredients API tests:
+
+```python
+INGREDIENTS_URL = reverse('recipe:ingredient-list')
+
+
+class PublicIngredientsApiTests(TestCase):
+    """Test the publicly available ingredients API."""
+```
+
+> Note: You are also going to use a default router for your ingredients API and
+        it is going to have the */list*. The URL name is going to reference your
+        listing URL.
+
+4. Add *setUp* method for creating an unauthorized client (as this is within
+   the public class):
+
+```python
+def setUp(self):
+    """Set up the client."""
+    self.client = APIClient()
+```
+
+5. Add your login required test to ensure that login is always required for this
+   endpoint:
+
+```python
+def test_login_required(self):
+    """Test that login is required to access the endpoint."""
+    res = self.client.get(INGREDIENTS_URL)
+
+    self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+```
+
+> Note: Firstly you create a request from the ingredients' URL as an unauthorized
+        client. This should respond with HTTP 401 UNAUTHORIZED.
+
+6. So you have now tested that login is required. You can then move on to testing
+   listing your ingredients. You will create a new private test class below the
+   *PublicIngredientsApiTests*:
+
+```python
+class PrivateIngredientsApiTests(TestCase):
+    """Test the private ingredients API."""
+```
+
+7. Then you create a *setUp* method for creating a client authorized as user
+   (as this is within the private class):
+
+```python
+def setUp(self):
+    """Set up the client."""
+    self.client = APIClient()
+    self.user = get_user_model().objects.create_user(
+        'test@gmail.com',
+        'admin123'
+    )
+
+    self.client.force_authenticate(self.user)
+```
+
+> Note: Firstly you create a class variable with the client's object.
+        Then you create a user and finally you authenticate the client with the
+        user.
+
+8. Add your retrieve ingredients test:
+
+```python
+def test_retrieve_ingredient_list(self):
+    """Test retrievint list of ingredients."""
+    Ingredient.objects.create(user=self.user, name='Kale')
+    Ingredient.objects.create(user=self.user, name='Salt')
+
+    res = self.client.get(INGREDIENTS_URL)
+
+    ingredients = Ingredient.objects.all().order_by('-name')
+    serializer = IngredientSerializer(ingredients, many=True)
+
+    self.assertEqual(res.status_code, status.HTTP_200_OK)
+    self.assertEqual(res.data, serializer.data)
+```
+
+> Note: Firstly you create two sample ingredients. Then you get the response
+        from the ingredients' URL using the authorized client and you save it
+        in the *res* variable. Then you create *ingredients* variable to store
+        all (two) created *Ingredient*'s objects. Next you run serialization
+        process using *IngredientSerializer* on *ingredients* variable.
+        Finally you check if the response from the endpoint is correct and the
+        response's data matches with the serializer's data.
+
+9. Next you will test that the ingredients are limited to the authenticated user:
+
+```python
+def test_ingredients_limited_to_user(self):
+    """Test that ingredients for the authenticated user are returned."""
+    user2 = get_user_model().objects.create_user(
+        'other@gmail.com',
+        'testpass'
+    )
+    Ingredient.objects.create(user=user2, name='Vinegar')
+    ingredient = Ingredient.objects.create(user=self.user, name='Tumeric')
+
+    res = self.client.get(INGREDIENTS_URL)
+
+    self.assertEqual(res.status_code, status.HTTP_200_OK)
+    self.assertEqual(len(res.data), 1)
+    self.assertEqual(res.data[0]['name'], ingredient.name)
+```
+
+> Note: Firstly you create the additional user (unauthorized). Then you create
+        the *Vinegar* ingredient using this user. Then you create another
+        ingredient called *Tumeric* and save it in *ingredient* variable. This
+        ingredient is going to be signed by the authenticated user.
+        First ingredient was not assigned to the variable because you did not
+        really needed to reference it at any point in this test whereas the
+        second ingredient you do reference because you check that the name of
+        this *ingredient* matches the name of the ingredient you created.
+        So you check if the response is correct, the length of the response's
+        data is only one (as there should be only one ingredient (*Tumeric*)
+        which was added by the authorized user) and you check if that *Tumeric*
+        is really this only ingredient stored in response's data.
+
+10. Run test - `docker-compose run --rm app sh -c "python3 manage.py test && flake8`.
+   Expect to fail.
+
+---
+
+### Implement Feature For Listing Ingredients
+
+> Note: Next you are going to add the feature to list ingredients from your
+        ingredients endpoint.
+
+1. Head over to *app/recipe/serializers.py* file and import *Ingredient* model:
+
+```python
+from core.models import Ingredient
+```
+
+2. Create the *IngredientSerializer* serializer similar to the tag serializer.
+   It is going to contain *ID* and *name* fields and the *ID* is going to be
+   read only:
+
+```python
+class IngredientSerializer(serializers.ModelSerializer):
+    """Serialzier for ingredient objects."""
+
+    class Meta:
+        """Meta class of IngredientSerializer."""
+
+        model = Ingredient
+        fields = ('id', 'name')
+        read_only_fields = ('id',)
+```
+
+> Note: The reason why you do not include *user* field is that you narrow all
+        the ingredients to these which are added by the authenticated user.
+        So there is no need to add that field as the user is going to be the same
+        constantly.
+
+3. Now head over to the *app/recipe/views.py* file. Now you are going to create
+   a ingredient ViewSet. I is going to be similar to the *TagViewSet*:
+
+```python
+class IngredientViewSet(viewsets.GenericViewSet,
+                        mixins.ListModelMixin):
+    """Manage ingredients in the database."""
+
+    authentication_classes = (TokenAuthentication,)
+    permission_classes = (IsAuthenticated,)
+    queryset = Ingredient.objects.all()
+    serializer_class = serializers.IngredientSerializer
+```
+
+> Note: `mixins.ListModelMixin` is to give this ViewSet support for listing
+        your ingredients. Then you add *TokenAuthentication*
+        to *authentication_classes* because this ViewSet is going to use the
+        *token authentication*. Next you add *IsAuthenticated* to your
+        *permission_classes* because you want to make sure all the users that
+        use this API are authenticated. Then you add *queryset* with all
+        ingredients.Finally you add *serializer_class* to connect to the
+        *IngredientSerializer*.
+
+4. Add the *get_queryset* method so that you can filter by the objects assigned
+   to the user that is currently authenticated and also order them by name:
+
+```python
+def get_queryset(self):
+    """Return objects from the current authenticated user only."""
+    return self.queryset.filter(user=self.request.user).order_by('-name')
+```
+
+> Note: This is why you did not add the *user* in the serializer's *fields*.
+        You filter by logged in user only.
+
+5. Now open *app/recipe/urls.py* file and register this ViewSet with a URL Router
+   so you can access the endpoint from the web:
+
+```python
+router.register('ingredients', views.IngredientViewSet)
+```
+
+6. Run test - `docker-compose run --rm app sh -c "python3 manage.py test && flake8`.
+   Expect OK.
+
+> Recommended: Push to GitHub.
+
+---
+
+### Implement Feature For Creating Ingredients
+
+> Note: Next you are going to implement the feature for creating ingredients
+        with your API. You are going to start by adding some basic tests and
+        then you are going to modify your ViewSet to support the *create*
+        function.
+
+1. Open up *test_ingredients_api.py* module and after
+   *test_ingredients_limited_to_user* add test to check if the correctly
+   created ingredient exists in the database with proper data:
+
+```python
+def test_create_ingredient_successful(self):
+    """Test create a new ingredient."""
+    payload = {'name': 'Cabbage'}
+    self.client.post(INGREDIENTS_URL, payload)
+
+    exist = Ingredient.objects.filter(
+        user=self.user,
+        name=payload['name']
+    ).exists()
+
+    self.assertTrue(exist)
+```
+
+> Note: Firstly you create the *payload* with the ingredient's data. Then you
+        post it on the INGREDIENTS_URL. After that you create a variable to store
+        the boolean value which will depend on whether that *payload*'s ingredient,
+        signed by the authorized user, exists, or not. Then you assert that
+        this variable should be True.
+
+2. Add another test in case the ingredient has invalid name:
+
+```python
+def test_create_ingredient_invalid(self):
+    """Test creating invalid ingredient fails."""
+    payload = {'name': ''}
+    res = self.client.post(INGREDIENTS_URL, payload)
+
+    self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+```
+
+> Note: You create a payload with the empty name field of the ingredient.
+        Then you post it as a registered client and save it in *res* variable.
+        Finally you check if the status code of response is the HTTP 400 BAD
+        REQUEST.
+
+3. Run test - `docker-compose run --rm app sh -c "python3 manage.py test && flake8`.
+   Expect to fail.
+4. Head over to *app/recipe/views.py* and add *mixins.CreateModelMixin*
+   within *IngredientViewSet* as the inherited module. This enables you to
+   override the *perform_create* method:
+
+```python
+class IngredientViewSet(viewsets.GenericViewSet,
+                        mixins.ListModelMixin,
+                        mixins.CreateModelMixin):
+```
+
+5. Add the *perform_create* method within *IngredientViewSet*:
+
+```python
+def perform_create(self, serializer):
+    """Create a new ingredient."""
+    serializer.save(user=self.request.user)
+```
+
+6. Run test - `docker-compose run --rm app sh -c "python3 manage.py test && flake8`.
+   Expect OK.
+7. Open up browser and go to *127.0.0.1:8000/api/user/create* and create new
+   user. Go to *127.0.0.1:8000/api/user/token* to log in. Copy token and add it
+   to *ModHeader* extension: Name: *Authorization*, Token: *Token <YOUR TOKEN>*.
+   Go to *127.0.0.1:8000/api/recipe*. Go to *127.0.0.1:8000/api/recipe/ingredients/*.
+   Add new ingredient and hit *POST*. Click on the searching bar and hit enter
+   to "refresh" the page.
+
+> Recommended: Push to GitHub.
+
+---
+
+### Re-factor Tags And Ingredients ViewSets
+
+> Note: Next you are going to re-factor your tags and ingredients API. You may
+        have noticed when you were building your tags and ingredients API that
+        there are a lot of commonalities between the two. You can re-factor this
+        code to reduce the code duplication. You are going to create a new base
+        class that contains the common components from the tags and the
+        ingredients ViewSets. Then you are going to base the tag and ingredient
+        ViewSets off this common class. This will help make your code easier
+        to read and reduce the code duplication.
+
+1. Head over to the *app/recipe/views.py* file and create a new class above both
+   the tag and ingredients classes:
+
+```python
+class BaseRecipeAttrViewSet(viewsets.GenericViewSet,
+                            mixins.ListModelMixin,
+                            mixins.CreateModelMixin):
+    """Base viewset for user owned recipe attributes."""
+
+    authentication_classes = (TokenAuthentication,)
+    permission_classes = (IsAuthenticated,)
+```
+
+> Note: As you can see the things that both classes had in common were: inherited
+        modules, *authentication_classes* and *permission_classes*.
+
+2. Next add methods that are common in tag and ingredient ViewSets to this new
+   class:
+
+```python
+def get_queryset(self):
+    """Return objects from the current authenticated user only."""
+    return self.queryset.filter(user=self.request.user).order_by('-name')
+
+def perform_create(self, serializer):
+    """Create a new object."""
+    serializer.save(user=self.request.user)
+```
+
+> Note: Both methods are the same in tag and ingredient ViewSets so you can
+        rewrite them in *BaseRecipeAttrViewSet* as its methods. Only in
+        *perform_create* you have to generalize the doc string.
+
+3. Now that you have your base class ready, you can delete the inherited modules
+   from tag and ingredient ViewSets. You can also delete their methods,
+   *authentication_classes* and *permission_classes* as they already are
+   in *BaseRecipeAttrViewSet* class. Now base your *TagViewSet* and
+   *IngredientViewSet* on *BaseRecipeAttrViewSet*:
+
+```python
+class BaseRecipeAttrViewSet(viewsets.GenericViewSet,
+                            mixins.ListModelMixin,
+                            mixins.CreateModelMixin):
+    """Base viewset for user owned recipe attributes."""
+
+    authentication_classes = (TokenAuthentication,)
+    permission_classes = (IsAuthenticated,)
+
+    def get_queryset(self):
+        """Return objects from the current authenticated user only."""
+        return self.queryset.filter(user=self.request.user).order_by('-name')
+
+    def perform_create(self, serializer):
+        """Create a new object."""
+        serializer.save(user=self.request.user)
+
+
+class TagViewSet(BaseRecipeAttrViewSet):
+    """Manage tags in the database."""
+
+    queryset = Tag.objects.all()
+    serializer_class = serializers.TagSerializer
+
+
+class IngredientViewSet(BaseRecipeAttrViewSet):
+    """Manage ingredients in the database."""
+
+    queryset = Ingredient.objects.all()
+    serializer_class = serializers.IngredientSerializer
+```
+
+4. Run test - `docker-compose run --rm app sh -c "python3 manage.py test && flake8`.
+   Expect OK.
+
+> Recommended: Push to GitHub.
