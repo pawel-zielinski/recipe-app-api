@@ -3520,3 +3520,21 @@ def test_full_update_recipe(self):
 
 3. Run test - `docker-compose run --rm app sh -c "python3 manage.py test && flake8`.
    Expect OK.
+
+## Add Upload Image Endpoint
+
+> Note: In this section you are going to add your image upload feature to the
+        recipe endpoint. This will allow you to upload images to go along with
+        your recipes. Before you can upload images you are going to need to add
+        a image field to your recipe model in order to use the image field in
+        Django. You need to install the *Pillow* Python package which is used
+        for manipulating images which are uploaded in Python. If you have not
+        done so already, make sure you commit all of the changes that you have
+        done so far.
+
+### Add Pillow Requirement
+
+1. Open up your *requirements.txt* file and add *Pillow* dependency underneath
+   *psycopg2*: ```Pillow>=5.3.0,<5.4.0```.
+
+2. *Pillow* requires some Linux packages to be installed before you can successfully compile and install it using the PIP package manager. You are going to make some small changes to the *Dockerfile* to support installing *Pillow*. The first thing you are going to do is you are going to add the JPEG dev
