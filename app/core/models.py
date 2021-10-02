@@ -6,6 +6,22 @@ from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, \
     PermissionsMixin
 from django.conf import settings
 
+""" The reason for this is because we don't control how this function is
+called, and Django requires that the function has two arguments when it calls
+it under the hood.
+The instance is used to pass in the model instance which the function is being
+called on. This is not required in our case because we are using a simple uuid
+for the name, however in some cases, you may wish to include some details from
+the model in the name that is created. For example, a common pattern is to
+store the files under /<id>/filename.jpg, to do this, you would need to be able
+to access the instance in this function.
+
+So although we don't need to use it in our case, we still need to add it
+because Django is going to pass it anyway, and if we don't define it we will
+get an exception.
+https://docs.djangoproject.com/en/2.2/ref/models/fields/#django.db.models.FileField.upload_to
+"""
+
 
 def recipe_image_file_patch(instance, filename):
     """Generate file path for new recipe image."""
