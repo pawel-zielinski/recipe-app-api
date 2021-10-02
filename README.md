@@ -3537,4 +3537,472 @@ def test_full_update_recipe(self):
 1. Open up your *requirements.txt* file and add *Pillow* dependency underneath
    *psycopg2*: ```Pillow>=5.3.0,<5.4.0```.
 
-2. *Pillow* requires some Linux packages to be installed before you can successfully compile and install it using the PIP package manager. You are going to make some small changes to the *Dockerfile* to support installing *Pillow*. The first thing you are going to do is you are going to add the JPEG dev
+2. *Pillow* requires some Linux packages to be installed before you can
+   successfully compile and install it using the PIP package manager. You are
+   going to make some small changes to the *Dockerfile* to support installing
+   *Pillow*. Head over to the *Dockerfile* and add `jpeg-dev` to the
+   `RUN apk add --update --no-cache postgresql-client` command:
+   `RUN apk add --update --no-cache postgresql-client jpeg-dev`.
+
+> Note: This adds the JPEG dev binaries to your *Dockerfile*.
+
+3. Next add some temporary build dependencies that are required for installing
+   the *Pillow* package. Update command with installation of the temporary
+   dependencies to:
+
+```
+RUN apk add --update --no-cache --virtual .tmp-build-deps \
+      gcc libc-dev linux-headers postgresql-dev musl-dev zlib zlib-dev
+```
+
+> Note: These `musl-dev`, `zlib` and `zlib-dev` packages are retrieved from the
+        PyPI page for the *Pillow* dependencies. It outlines all the dependencies
+        that you need to have installed before you can install the requirement.
+
+4. Next make some changes to the file structure in your Docker container. This
+   is so you have a place where you can store the static and media files within
+   your container without getting any permission errors:
+* Above `RUN adduser -D user` command add `RUN mkdir -p /vol/web/media` and
+  `RUN mkdir -p /vol/web/static` to create *media* and *static* folders.
+  `-p` means to create whole path. Other way it would say that there is no path
+  like `/vol/web/` to create *media*/*static*. So if the */vol/web/* directory does
+  not exist, it will create them. Good habbit is to store any files that may need to
+  be shared with other containers in a subdirectory called *vol*. This way you know
+  where all of the volume mappings need to be in your container if you need to share
+  this data with other containers in your service. For example if you had an EngineX
+  or a web server that needed to serve these media files you know that you would
+  need to map this volume and share it with the web server container.
+  You create *static* because in Django you typically have two files that hold
+  static data. Ine is the *static* and that is typically used for things like
+  JavaScript CSS files or any static files that you may want to serve which are not
+  typically changing during the execution of the application. The *media* directory
+  is typically used for any media files that are uploaded by the user. So that is
+  where you are going to store your recipe images.
+* Then you add user with the `RUN adduser -D user` command and after that change
+  the ownership of these files to the user that you have added. It is very important
+  that you do this before you switch to the user because once you switch to the user
+  it cannot give itself permissions to view or access these files. You need to give
+  it while you are still running as the root user which is before you switch to the
+  user. So set the ownership of all the directiories within the *vol* directory to
+  your custom user: `RUN chown -R user:user /vol/`. `-R` means recursive so instead
+  of just setting the *vol* permissions it will set any subdirectories in the *vol*
+  folder. Next add permissions to that folder. `-R 755` means that the user (now
+  owner) can do everything with the directory and the rest can read and execute from
+  the directory.
+5. Head over to the *app/app/settings.py* file and configure static URL, media
+   URL, static root and media root. Scroll to the bottom of the file and after
+   `STATIC_URL = '/static/'` add:
+
+```python
+MEDIA_URL = '/media/'
+
+MEDIA_ROOT = 'vol/web/media'
+STATIC_ROOT = '/vol/web/static'
+```
+
+> Note: Static files will be served from the */static/* part of your web server
+        and the media from */media/* part. For example when you upload an image
+        there will be created the URL with this image on
+        `127.0.0.1:8000/media/uploads/recipe/<YOUR_UUID_NAME>.png`. That way when
+        you upload media files you have an accessible URL so that you can access
+        them through your web server. Next you add media and static root. What
+        it does is it tells Django where to store all the media/static files. You
+        want all of the media/static files to be stored in the */vol/web/media/*
+        (or */vol/web/static/*) directory that you create as part of your build
+        process in your Docker container. Django actually comes with a command
+        called *collect staticfiles* and it collects all the staticfiles from any
+        dependency that you have and it combines them all and stores  them in the
+        *static root*. You can run this one starting your project and it will pull
+        all of the CSS and JavaScript that are required for the Django REST
+        Framework browsable API and for the Django admin and it will sore them in
+        this static directory. That means when you are serving your project in
+        production you can access these staticfiles and you can view the Django
+        admin just as you can view it in your local machine.
+
+6. Open up *app/app/urls.py* file and do some imports:
+* `from django.conf.urls.static import static`.
+* `from django.conf import settings`.
+7. Add a URL for your media files to the *urlpatterns*:
+
+```python
+urlpatterns = [
+    path('admin/', admin.site.urls),
+    path('api/user/', include('user.urls')),
+    path('api/recipe/', include('recipe.urls')),
+] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+```
+
+> Note: By default the Django development server will serve static files for any
+        dependencies in your project. However it does not serve media files by
+        default. You need to manually add this in the URLs. What this does is it
+        makes the media URL available in your development server so you can test
+        uploading images for your recipes without having to set up a separate web
+        server for serving these media files.
+
+8. Build your Docker image and make sure that it builds successfully with your
+   new dependencies. Head over to the terminal and run `docker-compose build`.
+
+---
+
+### Modify Recipe Model
+
+> Note: Next you are going to modify your recipe model to accept an *ImageField*.
+        You are going to start by adding the function that generated the name which
+        you are going to call the *ImageField* on the system after the image has
+        been uploaded. Whenever you upload a file to a Django model you need to
+        make sure you change the name and you do not just use the same name that
+        was uploaded. This is to make sure all the names are consistent and also
+        to make sure that there are no conflicts with the name that you upload.
+        You are going to generate a function which will create the path to the
+        image on your system and you are going to use a *UUID* to uniquely
+        identify the image that you assign to the *ImageField*. You start with
+        some unit tests to test this new function.
+
+1. Head over to the *app/core/tests/test_models.py* and import:
+   `from unittest.mock import patch`.
+2. Scroll to the bottom of *ModelTests* and add *test_recipe_file_name_uuid*
+   under the *test_recipe_str*:
+
+```python
+@patch('uuid.uuid4')
+def test_recipe_file_name_uuid(self, mock_uuid):
+    """Test that image is saved in the correct location."""
+    uuid = 'test-uuid'
+    mock_uuid.return_value = uuid
+    file_path = models.recipe_image_file_patch(None, 'myimage.jpg')
+
+    exp_path = f'uploads/recipe/{uuid}.jpg'
+    self.assertEqual(file_path, exp_path)
+```
+
+> Note: You are going to mock the UUID function from the default UUID library
+        that comes with Python and you are going to change the value that it
+        returns. Then you are going call your function and and make sure that
+        the string that is created for the path matches what you expect it to
+        match with the sample UUID.. You add *patch* decorator to the top of
+        this function and then the path of the function that you are going to
+        mock is going to be `uuid.uuid4`. UUID module will generate a unique
+        UUID version 4. Next you create `uuid` variable to choose the value
+        that you will use when mocking. After that you mock the UUID - pass
+        the functionality of the UUID to mock. Mock will use this
+        functionality and then it will set the returned value to the *uuid*
+        variable. Next you create a file path using *recipe_image_file_patch*
+        which basically stripes the format of the media (i. e. *.jpg* or *.png)*
+        from the name, remembers the format, sets new name using UUID (mocked
+        to the *uuid* variable) and adds format. After that you create path
+        that you expect it to be so `uploads/recipe/test-uuid.jpg`. Finally
+        you check if the expected file path is the same as the path that was
+        created using UUID and recipe_image_file_patch model's method.
+
+3. Run test - `docker-compose run --rm app sh -c "python3 manage.py test && flake8`.
+   Expect to fail.
+4. Head over to the *app/core/models.py* file and import:
+* `import uuid`: to generate UUID.
+* `import os`: to create a valid path for your file destination.
+5. Create the *recipe_image_file_patch* function just above *UserManager*:
+
+```python
+def recipe_image_file_patch(instance, filename):
+    """Generate file path for new recipe image."""
+    ext = filename.split('.')[-1]
+    filename = f'{uuid.uuid4()}.{ext}'
+
+    return os.path.join('uploads/recipe/', filename)
+```
+
+> Note: Two parameters: *instance* is creating the path, *filename* the
+        original filename of the file. Then you split the filename to the name
+        and file type and the you save the last part to the *ext* variable.
+        Next your generate UUID version 4 name and add the extension of the
+        original file. Finally you return the new filename with full path that
+        you want to use as the storage for that file.
+
+6. Scroll down to the *Recipe* model and add new *image* field:
+
+```python
+image = models.ImageField(null=True, upload_to=recipe_image_file_patch)
+```
+
+> Note: This field is optional so the `null=True`. You do not want to add the
+        `()` at the end of `upload_to=recipe_image_file_patch` because you do
+        not want to call the function, you just want to pass a reference to
+        the function so it can be called every time you upload. It gets called
+        in the background by Django by the *ImageField* feature.
+
+7. Head over to the terminal and run migrations:
+
+```
+docker-compose run --rm app sh -c "python manage.py makemigrations core"
+```
+
+8.  Run test - `docker-compose run --rm app sh -c "python3 manage.py test && flake8`.
+   Expect OK.
+
+> Recommended: Push to GitHub.
+
+---
+
+### Add Tests For Uploading Image To Recipe
+
+> Note: Now that you have your image field available on your *Recipe* model,
+        you can add the API for uploading images. You are going to start by
+        adding a few tests to test uploading images through your API.
+
+1. Head over to the *app/recipe/tests/test_recipe_api.py* and do some imports:
+* `import tempfile`: a Python function that comes out of the box of Python
+  that allows you to generate temporary files. It allows you to call a
+  function which will then create a temp file somewhere in the system and then
+  you can remove that file after you have used it.
+* `import os`: allows to perform creating path names and also checking if
+  files exist on the system.
+* `from PIL import Image`: `PIL` is *Pillow* requirement and this is basically
+  the original name and the *Pillow* is just a fork of it which was then built
+  on and is the recommended latest version by Django. This import will let you
+  create test images which you can then upload to your API.
+2. Next add a helper function at the top. This function will return URL for
+   recipe image upload:
+
+```python
+def image_upload_url(recipe_id):
+    """Return URL for recipe image upload."""
+    return reverse('recipe:recipe-upload-image', args=[recipe_id])
+```
+
+> Note: You are going to need an existing recipe to call this function.
+        First `recipe` is the name of the app defined in
+        *app/recipe/urls.py/app_name*. Second `recipe` is the name of the
+        model linked to the ViewSet's *queryset* (converted to lowercase).
+        `upload-image` is `upload_image` method in
+        *app/recipe/views.py/RecipeViewSet* identified by the `url_path` in
+        the `upload_image`'s `action` decorator.
+
+3. Scroll to the bottom and add new test class because there is going to be
+   some common functionality for the image upload test that you are going to
+   want to repeat and it is a good idea to keep it separate from the rest:
+
+```python
+class RecipeImageUploadTests(TestCase):
+    """Test Image Upload API."""
+```
+
+4. Add *setUp* function to create the authenticated client and recipe:
+
+```python
+def setUp(self):
+    """Set up authorized client and recipe."""
+    self.client = APIClient()
+    self.user = get_user_model().objects.create_user(
+        'test@gmail.com',
+        'admin123'
+    )
+    self.client.force_authenticate(self.user)
+    self.recipe = sample_recipe(user=self.user)
+```
+
+> Note: You add recipe because it is going to be a consistent theme for all of
+        the tests.
+
+5. Add *tearDown* function. As the *setUp* is always called before tests, the
+   *tearDown* is being called after the tests. You create this so that after
+   the tests all the sample images stored in the file system would be deleted.
+   Thanks to that method you will make sure that your file system is kept
+   clean after your tests:
+
+```python
+def tearDown(self):
+    """Clean after tests."""
+    self.recipe.image.delete()
+```
+
+6. Add `test_upload_image_to_recipe` to test uploading an image to recipe:
+
+```python
+def test_upload_image_to_recipe(self):
+    """Test uploading an image to recipe."""
+    url = image_upload_url(self.recipe.id)
+    with tempfile.NamedTemporaryFile(suffix='.jpg') as ntf:
+        img = Image.new('RGB', (10, 10))
+        img.save(ntf, format='JPEG')
+        ntf.seek(0)
+        res = self.client.post(url, {'image': ntf}, format='multipart')
+
+    self.recipe.refresh_from_db()
+    self.assertEqual(res.status_code, status.HTTP_200_OK)
+    self.assertIn('image', res.data)
+    self.assertTrue(os.path.exists(self.recipe.image.path))
+```
+
+> Note: You create a recipe's (from *setUp*) URL for uploading image to that
+        recipe using *image_upload_url* helper function that you have just
+        created. This is going to use the sample recipe that gets created and
+        then you are going to use a context manager `with`. This creates a
+        named temporary file on the system at a random location (usually in
+        */temp* folder). You do it using *NamedTemporaryFile*. You also can
+        give it a suffix which is going to be the extension that you want to
+        use (you want picture so *.jpg*). Next you put `nft` and the reason
+        you named temporary file is because you want to pass it into the
+        *ImageField*. So that context manager creates a temporary file in the
+        system that you can then write to and then after you exit the context
+        manager it will automatically remove that file. So within that `with`
+        statement, so within that temporary file (set up to *.jpg*), you write
+        an image (a 10x10 resolution black square) and then save it as the
+        JPEG file. `ntf.seek(0)` it is the way that Python reads files. So
+        because you have saved the file, the seeking will be done to the end
+        of the file. If you try to access it then it would just be blank
+        because you have already read up the end of the file so use this
+        `seek` function to set the pointer back to the beginning of the file
+        so then it is as if you have just opened it. Then you create a POST
+        request on the image upload URL with the payload containing temp
+        image. You also define format as *multipart* to tell Django that you
+        want to make a multi-part form request which means a form that
+        consists of data. By default it would just be a form that consists of
+        a JSON object and you actually want to post data so you need to pass
+        in this `format='multipart'`. Then you run assertions that the
+        response's status code should be OK, the image should be the part of
+        responses data and you check if the path to that image exists.
+
+7. Create test uploading a bad image:
+
+```python
+def test_upload_image_bad_request(self):
+    """Test uploading an invalid image."""
+    url = image_upload_url(self.recipe.id)
+    res = self.client.post(url, {'image': 'notimage'}, format='multipart')
+
+    self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+```
+
+> Note: You create URL for uploading image for the pre-created reciepe.
+        Then you create a POST request on that URL as the authorized as user
+        client passing string as image (which is wrong). You also set up the
+        format to the multipart because you only want the image type to be
+        bad. Finally you assert that the response should be HTTP 400.
+
+8. Run test - `docker-compose run --rm app sh -c "python3 manage.py test && flake8`.
+   Expect to fail.
+
+---
+
+### Add Feature To Upload Image
+
+> Note: Next you can implement the feature to upload your image and make your
+        test pass. You are going to start by creating a serializer that will
+        handle the uploaded image and then you are going to **modify your**
+        **ViewSet to accept a new action that allows you to upload an image**
+        **for a recipe**.
+
+1. Head over to the *app/recipe/serializers.py* and create a new serializer to
+   the bottom:
+
+```python
+class RecipeImageSerializer(serializers.ModelSerializer):
+    """Serializer for uploading images to recipes."""
+
+    class Meta:
+        """Meta class of RecipeImageSerializer."""
+
+        model = Recipe
+        fields = ('id', 'image')
+        read_only_fields = ('id',)
+```
+
+2. Head over to the *app/recipe/views.py* file and import:
+* `from rest_framework.decorators import action`: decorator to add custom actions
+  to your ViewSet.
+* `from rest_framework.response import Response`: for returning a custom response.
+* `from rest_framework import status`: the same module that you import in your
+  test to check the status. You are going to use it to generate a status for your
+  custom action.
+3. Scroll down to the *RecipeViewSet* and add a new action:
+
+__You define actions as functions in the ViewSet. By default it has these__
+__*get_queryset*, *get_serializer_class* and *perform_create*. These are all__
+__default actions that you override. So if you did not override them then they__
+__will just perform the default action that the Django REST Framework does. You__
+__can actually add custom functions here and define them as custom actions. The__
+__way you do that is you use the *action* decorator and defining the method__
+__that your action is going to accept. So the method could be POST, PUT, PATCH__
+__or GET. You are going to make the action just POST. You are going to allow__
+__users to post an image to your recipe.__
+
+```python
+@action(methods=['POST'], detail=True, url_path='upload-image')
+def upload_image(self, request, pk=None):
+    """Upload an image to a recipe."""
+    recipe = self.get_object()
+    serializer = self.get_serializer(
+        recipe,
+        data=request.data
+    )
+
+    if serializer.is_valid():
+        serializer.save()
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK
+        )
+
+    return Response(
+        serializer.errors,
+        status=status.HTTP_400_BAD_REQUEST
+    )
+```
+
+> Note: In *action* decorator you set up the method that you want to allow
+        users to perform. Next `detail=True` to say this action will be for
+        the detail and the *detail* is a specific recipe so you are going to
+        only be able to upload images for recipe that already exist and you
+        will use the detail URL that has the ID of the recipe in the URL. It
+        knows which one to upload the image to. Then you add
+        `url_path='upload-image'`. That is the path name for your URL; the
+        path that is visible within the URL (so it will be the detail URL) so
+        *127.0.0.1:8000/api/recipe/recipes/<RECIPE'S ID>/upload-image/*. Next
+        you create the *upload_image* with the `pk=None` parameter as primary
+        key that is passed in with the URL gets passed into the view as *pk*.
+        Then you retrieve the recipe object that is being accessed based on
+        the ID in the URL. Then you call serializer to pass in your recipe
+        and the request's data. Then you check if the serilizer is valid.
+        This validates the data to make sure it is all correct. It makes sure
+        that the image field is correct and that no other extra fields have
+        been provided. If it is valid you can use the *save* function to save
+        object. That basically performs a *save* on the recipe model with the
+        updated data. Next your return a response with the content of
+        serializer's data which is going to contain serilizer's objects that
+        were uploaded which will be the ID of the recipe and the URL of the
+        image. You also pass status code HTTP 200 OK to that response.
+        If the serializer is invalid there is the standard way where you
+        return the errors for the serializer (these are automatically
+        generated by the Django REST Framework; it will perform some auto
+        validation on your field and if it does not pass the validation then
+        it creates these errors for you which lists all of the fields that
+        have errors in the data) and then you assign the status of HTTP 400
+        BAD REQUEST.
+
+4. The last thing to do is to update the *get_serializer_class* function.
+
+__You could have just got the serializer in *upload_image*'s *serializer* and__
+__set the correct serializer to your *RecipeImageSerializer*. The reason you__
+__do not do that is because the best practice is to return the serializer__
+__using this *get_serializer_class*. This way the Django REST Framework knows__
+__which serializer to display in the browsable API.__
+
+So within *get_serializer_class* you will check if the *action* is *upload-image*:
+
+```python
+def get_serializer_class(self):
+    """Return appripriate serializer class."""
+    # retrieve is a default action of ViewSet
+    if self.action == 'retrieve':
+        return serializers.RecipeDetailSerializer
+    elif self.action == 'upload_image':
+        return serializers.RecipeImageSerializer
+
+    return self.serializer_class
+```
+
+5. Run test - `docker-compose run --rm app sh -c "python3 manage.py test && flake8`.
+   Expect OK.
+6. Test the endpoint in the browser -
+   *127.0.0.1:8000/api/recipe/recipes/1/upload-image/*.
+
+> Recommended: Push to GitHub.
