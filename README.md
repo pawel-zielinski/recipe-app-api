@@ -3596,7 +3596,7 @@ RUN apk add --update --no-cache --virtual .tmp-build-deps \
 ```python
 MEDIA_URL = '/media/'
 
-MEDIA_ROOT = 'vol/web/media'
+MEDIA_ROOT = '/vol/web/media'
 STATIC_ROOT = '/vol/web/static'
 ```
 
