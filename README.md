@@ -1,13 +1,13 @@
-# Python Django recipe Project (by Mark Winterbottom)
+# Python Django recipe Project
 
 ---
 
-#### This is an instruction how to:
+#### This is the instruction how to:
 * Create a fully-functioning REST API.
 * Setup project using Docker.
 * Configure Travis-CI.
 * Create endpoints.
-* Add listing and filtering. 
+* Add listing and filtering.
 * Upload images.
 * Create different unit tests.
 
