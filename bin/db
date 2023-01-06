@@ -1,0 +1,3 @@
+#!/bin/bash
+
+docker exec -it recipe-app-api-db-1 psql -U postgres
